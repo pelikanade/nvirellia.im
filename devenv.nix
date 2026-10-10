@@ -1,7 +1,7 @@
 { pkgs, ... }:
 
 {
-  packages = [ pkgs.git ];
+  packages = [ pkgs.git pkgs.just pkgs.watchexec ];
 
   languages.go.enable = true;
 }
