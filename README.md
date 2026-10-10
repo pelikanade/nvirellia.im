@@ -9,6 +9,15 @@ Stdlib only. Templates and static assets are embedded.
 
     go run ./cmd/nvirellia
 
+## Dev server
+
+    go run ./cmd/nvirellia dev
+
+Run from the repo root. `dev` rebuilds and restarts the server when a `.go` file or
+`go.mod` changes. Templates and static files are read from disk on every request, and
+open pages reload when they change. Production (`go run ./cmd/nvirellia`) serves the
+embedded copies and sends no reload script.
+
 ## Configuration
 
 | Variable | Default | Purpose |
