@@ -22,19 +22,15 @@ type config struct {
 	FeedTTL     time.Duration
 	MagpieURL   string
 	MagpieToken string
-	PaseoURL    string
-	PaseoToken  string
 }
 
-// loadConfig reads the environment. An unset MAGPIE_URL or PASEO_URL leaves that
-// upstream unconfigured, which serves sample data for it.
+// loadConfig reads the environment. An unset MAGPIE_URL leaves magpie unconfigured,
+// which serves sample data.
 func loadConfig(getenv func(string) string) (config, error) {
 	c := config{
 		ListenAddr:  orDefault(getenv("LISTEN_ADDR"), ":8080"),
 		MagpieURL:   getenv("MAGPIE_URL"),
 		MagpieToken: getenv("MAGPIE_TOKEN"),
-		PaseoURL:    getenv("PASEO_URL"),
-		PaseoToken:  getenv("PASEO_TOKEN"),
 	}
 	ttl, err := time.ParseDuration(orDefault(getenv("FEED_TTL"), "30s"))
 	if err != nil {
@@ -71,11 +67,7 @@ func run() error {
 	if cfg.MagpieURL != "" {
 		tokens = feed.NewMagpie(cfg.MagpieURL, cfg.MagpieToken)
 	}
-	var agents feed.AgentSource
-	if cfg.PaseoURL != "" {
-		agents = feed.NewPaseo(cfg.PaseoURL, cfg.PaseoToken)
-	}
-	svc := feed.New(feed.Config{Location: loc, TTL: cfg.FeedTTL}, tokens, agents)
+	svc := feed.New(feed.Config{Location: loc, TTL: cfg.FeedTTL}, tokens)
 
 	handler, err := web.NewHandler(svc, site.Assets)
 	if err != nil {

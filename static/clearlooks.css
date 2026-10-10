@@ -258,7 +258,7 @@ code, .mono { font-family: var(--cl-mono); font-size: 12px; }
 }
 
 /* =====================================================================
-   v2 — System Monitor (notebook tabs, Resources, Agents, window controls)
+   v2 — System Monitor (notebook tabs, Resources, window controls)
    ===================================================================== */
 [hidden] { display: none !important; }
 .no-js .js-only { display: none !important; }
@@ -274,12 +274,6 @@ code, .mono { font-family: var(--cl-mono); font-size: 12px; }
 .wm .max[aria-pressed="true"]::before { left: 6px; top: 3px; right: 3px; bottom: 6px; border-top-width: 1px; }
 .wm .max[aria-pressed="true"]::after { content: ""; left: 3px; top: 6px; right: 6px; bottom: 3px; background: #3f6fae; border: 1px solid #fff; box-shadow: none; }
 .window.wide { max-width: none; margin: 0; border-radius: 0; border-width: 0 0 1px; }
-
-/* avatar status light: green = an agent is running, grey = none */
-.led { position: absolute; right: -5px; bottom: -5px; width: 16px; height: 16px; border-radius: 50%;
-  border: 2px solid #fff; box-shadow: 0 0 0 1px #555753; background: radial-gradient(circle at 35% 35%, #eeeeec, #888a85 70%); }
-.led.on { box-shadow: 0 0 0 1px #2e6a04; background: radial-gradient(circle at 35% 35%, #d7fbae, #73d216 45%, #4e9a06); }
-.mast-avatar .led { width: 13px; height: 13px; right: -4px; bottom: -4px; }
 
 /* toolbar applet: CPU-monitor-style sparkline (multiload look) */
 .spark { display: inline-flex; align-items: center; gap: 6px; margin-left: 4px; padding: 2px; color: var(--cl-muted); text-decoration: none;
@@ -316,16 +310,6 @@ code, .mono { font-family: var(--cl-mono); font-size: 12px; }
 .badge-sample { display: inline-block; font-size: var(--cl-size-xs); letter-spacing: .06em; line-height: 1.6; padding: 0 6px; cursor: help;
   color: #6b4400; background: #fdf3d0; border: 1px solid #dcc06a; border-radius: 2px; }
 .mon .frame { background: var(--cl-base); }
-/* LIVE pill in the Agents tab label: marks the live-updating tab (always shown; the yellow
-   "sample data" badge says whether the numbers are real). #2c5f05 on #e6f4d4 = 6.6:1 */
-.live { display: inline-flex; align-items: center; gap: 4px; margin-left: 2px; padding: 0 5px 0 4px; height: 15px;
-  font-size: var(--cl-size-xs); font-weight: bold; letter-spacing: .08em; line-height: 1; color: #2c5f05;
-  background: linear-gradient(to bottom, #f1f9e7, #dcefc6); border: 1px solid #8cbf5a; border-radius: 8px; box-shadow: inset 0 1px 0 rgba(255,255,255,.7); }
-.live-dot { position: relative; width: 7px; height: 7px; border-radius: 50%; flex: none;
-  background: radial-gradient(circle at 35% 35%, #b7f27a, #4e9a06 70%); box-shadow: 0 0 0 1px #3d7a05; }
-.live-dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: rgba(78,154,6,.55); animation: cl-pulse 2s ease-out infinite; }
-@keyframes cl-pulse { 0% { transform: scale(1); opacity: .8; } 70%, 100% { transform: scale(2.4); opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .live-dot::after { animation: none; opacity: 0; } }
 .is-live .badge-sample { display: none; }
 .mon .frame + .frame, .mon .mon-row { margin-top: 20px; }
 .mon-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 18px; align-items: start; }
@@ -382,40 +366,6 @@ code, .mono { font-family: var(--cl-mono); font-size: 12px; }
 .scale .hc { display: inline-block; width: 11px; height: 11px; }
 .heat-read { margin-top: 6px; min-height: 1.5em; font-size: var(--cl-size-sm); }
 
-/* Agents: sunken striped GtkTreeView */
-.tree-wrap { overflow: hidden; }
-.tree { width: 100%; border-collapse: collapse; }
-.tree th { padding: 0; text-align: left; font-weight: normal; background: var(--cl-header); border-bottom: 1px solid #b2afab; border-right: 1px solid #d3d0cc; }
-.tree th:last-child { border-right: 0; }
-.tree th button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 4px 8px; margin: 0;
-  font: inherit; color: var(--cl-text); text-align: left; background: none; border: 0; cursor: pointer; }
-.tree th button:hover { background: var(--cl-btn-hover); }
-.tree th button:focus-visible { outline-offset: -3px; }
-.tree th.num button { justify-content: flex-end; }
-.sort { width: 9px; font-size: 9px; color: #555753; }
-.tree th[aria-sort="ascending"] .sort::after { content: "▲"; }
-.tree th[aria-sort="descending"] .sort::after { content: "▼"; }
-.tree th[aria-sort] { background: linear-gradient(to bottom, #f6f9fd, #e6eef8); }
-.tree td { padding: 6px 8px; vertical-align: top; }
-.tree tbody tr:nth-child(even) { background: var(--cl-stripe); }
-.tree tbody tr:hover { background: var(--cl-prelight); }
-.tree .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.tree .c-name { font-weight: bold; white-space: nowrap; }
-.tree .c-name .ic { margin-right: 6px; }
-.tree .c-status { white-space: nowrap; }
-.tree .c-task { color: var(--cl-muted); }
-.st { position: relative; display: inline-block; width: 10px; height: 10px; margin: 0 8px 0 2px; border-radius: 50%; vertical-align: -1px; }
-.st-running { width: 8px; height: 8px; margin: 0 9px 0 3px; vertical-align: 0; background: #4e9a06; }
-.st-running::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 1.5px solid rgba(78,154,6,.22); border-top-color: #2e6a04; animation: cl-spin 1s linear infinite; }
-.st-sleeping { background: #888a85; border: 1px solid #555753; }
-.st-idle { background: #fff; border: 1.5px solid #555753; }
-@keyframes cl-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .st-running::after { animation: none; } }
-.mon-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
-.mon-foot p { color: var(--cl-muted); font-size: var(--cl-size-sm); }
-.btn[aria-disabled="true"] { color: #6c6e69; cursor: not-allowed; background: linear-gradient(to bottom, #f7f6f5, #ebeae8); border-color: #b4b1ad; }
-.btn[aria-disabled="true"] .ic { opacity: .55; }
-
 /* statusbar monitor line */
 .sb-mon .sb-txt { display: inline; }
 .sb-mon b { color: var(--cl-text); font-weight: normal; }
@@ -462,22 +412,9 @@ code, .mono { font-family: var(--cl-mono); font-size: 12px; }
   .readouts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .statusbar { flex-wrap: wrap; }
   .js .statusbar .sb-who { display: none; }
-  /* agents tree view collapses into stacked rows; header stays as sort buttons */
-  .tree, .tree tbody { display: block; }
-  .tree thead { display: block; }
-  .tree thead tr { display: flex; flex-wrap: wrap; }
-  .tree th { flex: 1 1 auto; border-bottom: 1px solid #b2afab; }
-  .tree th[data-key="task"] { flex-grow: 2; }   /* 4 sort buttons fit one line at 390 */
-  .tree th button { padding: 5px 7px; gap: 4px; }
-  .tree tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name status" "task up"; gap: 2px 10px; padding: 7px 10px; }
-  .tree td { display: block; padding: 0; }
-  .tree .c-name { grid-area: name; } .tree .c-status { grid-area: status; text-align: right; }
-  .tree .c-up { grid-area: up; }
-  .tree .c-task { grid-area: task; }
-  .tree td[data-label]::before { content: attr(data-label) " "; color: var(--cl-muted); font-size: var(--cl-size-xs); letter-spacing: .06em; }
 }
 
-/* ---------- no-JS: Profile sheet; Resources/Agents reached by :target ---------- */
+/* ---------- no-JS: Profile sheet; Resources reached by :target ---------- */
 .js .tabpanel:not(.on) { display: none !important; }
 .no-js .mon { display: none; }
 .no-js .mon:target { display: block; }
@@ -486,10 +423,8 @@ code, .mono { font-family: var(--cl-mono); font-size: 12px; }
 .nojs-tabs .ntab { text-decoration: none; }
 .nojs-tabs a[href="#profile"],
 main:not(:has(.mon:target)) .nojs-tabs a[href="#profile"],
-main:has(#resources:target) .nojs-tabs a[href="#resources"],
-main:has(#agents:target) .nojs-tabs a[href="#agents"] {
+main:has(#resources:target) .nojs-tabs a[href="#resources"] {
   height: 31px; background: var(--cl-base); border-bottom-color: var(--cl-base);
   box-shadow: inset 0 2px 0 #7aa3d8, inset 0 3px 0 #fff; z-index: 1;
 }
-main:has(#resources:target) .nojs-tabs a[href="#profile"],
-main:has(#agents:target) .nojs-tabs a[href="#profile"] { height: 27px; background: linear-gradient(to bottom, #e9e7e5, #d8d6d3); box-shadow: inset 0 1px 0 rgba(255,255,255,.65); }
+main:has(#resources:target) .nojs-tabs a[href="#profile"] { height: 27px; background: linear-gradient(to bottom, #e9e7e5, #d8d6d3); box-shadow: inset 0 1px 0 rgba(255,255,255,.65); }

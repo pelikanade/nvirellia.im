@@ -10,11 +10,6 @@ type TokenSource interface {
 	Usage(ctx context.Context, since time.Time) ([]Bucket, error)
 }
 
-// AgentSource fetches the current paseo agent list.
-type AgentSource interface {
-	Agents(ctx context.Context) ([]Agent, error)
-}
-
 // Config holds the feed's timing. Zero values take the defaults noted below.
 type Config struct {
 	Location *time.Location // default: UTC+8
@@ -29,12 +24,11 @@ type Service struct {
 	loc    *time.Location
 	now    func() time.Time
 	tokens *cached[[]Bucket]
-	agents *cached[[]Agent]
 }
 
 // New wires the service. A nil source means that upstream is unconfigured: its
 // half of the feed is always sample data.
-func New(cfg Config, tokens TokenSource, agents AgentSource) *Service {
+func New(cfg Config, tokens TokenSource) *Service {
 	if cfg.Location == nil {
 		cfg.Location = time.UTC
 	}
@@ -55,19 +49,13 @@ func New(cfg Config, tokens TokenSource, agents AgentSource) *Service {
 			return tokens.Usage(ctx, windowStart(s.now(), s.loc))
 		}
 	}
-	var fetchAgents func(context.Context) ([]Agent, error)
-	if agents != nil {
-		fetchAgents = agents.Agents
-	}
 	s.tokens = &cached[[]Bucket]{name: "magpie", fetch: fetchTokens, now: cfg.Now,
-		ttl: cfg.TTL, timeout: cfg.Timeout, maxStale: cfg.MaxStale}
-	s.agents = &cached[[]Agent]{name: "paseo", fetch: fetchAgents, now: cfg.Now,
 		ttl: cfg.TTL, timeout: cfg.Timeout, maxStale: cfg.MaxStale}
 	return s
 }
 
-// Feed returns the current snapshot. Sample is true while either upstream is
-// unconfigured or unreachable (including when stale data is being served).
+// Feed returns the current snapshot. Sample is true while magpie is unconfigured
+// or unreachable (including when stale data is being served).
 func (s *Service) Feed() Feed {
 	now := s.now()
 	buckets, haveTokens, freshTokens := s.tokens.get()
@@ -76,19 +64,10 @@ func (s *Service) Feed() Feed {
 		tokens = aggregate(buckets, now, s.loc)
 	}
 
-	agents, haveAgents, freshAgents := s.agents.get()
-	if !haveAgents {
-		agents = sampleAgents()
-	}
-	if agents == nil {
-		agents = []Agent{}
-	}
-
 	return Feed{
-		Sample:      !freshTokens || !freshAgents,
+		Sample:      !freshTokens,
 		GeneratedAt: now.In(s.loc).Format(time.RFC3339),
 		TZ:          s.loc.String(),
 		Tokens:      tokens,
-		Agents:      agents,
 	}
 }

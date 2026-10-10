@@ -1,5 +1,5 @@
-// Package feed builds the nvirellia.im feed: token windows from magpie and the
-// agent list from paseo, falling back to sample data per upstream.
+// Package feed builds the nvirellia.im feed: token windows from magpie, falling
+// back to sample data while magpie is unavailable.
 package feed
 
 import (
@@ -22,11 +22,10 @@ func Location() (*time.Location, error) {
 
 // Feed is the body of GET /api/stats.json.
 type Feed struct {
-	Sample      bool    `json:"sample"`
-	GeneratedAt string  `json:"generatedAt"`
-	TZ          string  `json:"tz"`
-	Tokens      Tokens  `json:"tokens"`
-	Agents      []Agent `json:"agents"`
+	Sample      bool   `json:"sample"`
+	GeneratedAt string `json:"generatedAt"`
+	TZ          string `json:"tz"`
+	Tokens      Tokens `json:"tokens"`
 }
 
 // Tokens is the magpie-derived part of the feed.
@@ -54,14 +53,6 @@ type Daily struct {
 	Start  string   `json:"start"`
 	Input  []*int64 `json:"input"`
 	Output []*int64 `json:"output"`
-}
-
-// Agent is one row of the paseo agent list.
-type Agent struct {
-	Name      string `json:"name"`
-	Status    string `json:"status"`
-	UptimeSec int64  `json:"uptimeSec"`
-	Task      string `json:"task"`
 }
 
 // Bucket is one hour of magpie usage, keyed by its start instant.

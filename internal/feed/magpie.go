@@ -3,6 +3,7 @@ package feed
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -72,4 +73,13 @@ func getJSON(ctx context.Context, client *http.Client, target, token, name strin
 		return fmt.Errorf("%s: bad JSON: %w", name, err)
 	}
 	return nil
+}
+
+// errorWithoutURL strips the *url.Error wrapper so request errors carry no target URL.
+func errorWithoutURL(err error) error {
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		return ue.Err
+	}
+	return err
 }

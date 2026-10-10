@@ -1,12 +1,11 @@
 /* Profile — System Monitor. Small vanilla JS, no libraries.
    Ported from the v2.1 prototype script. Without JS the page is the static Profile
-   sheet; Resources and Agents still render server-side and are reached via #resources
-   and #agents (:target).
+   sheet; Resources still renders server-side and is reached via #resources (:target).
 
    Data: the feed embedded in <script id="cl-stats"> (same JSON as /api/stats.json).
    It is refreshed from /api/stats.json every 60 s while the tab is visible.
 
-   URL hash: #profile | #resources | #agents picks a tab (plain links work too);
+   URL hash: #profile | #resources picks a tab (plain links work too);
    range=7d starts the history graph on the 7-day range. */
 (() => {
   'use strict';
@@ -24,35 +23,24 @@
   const fmt = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e4 ? Math.round(n / 1e3) + 'k'
     : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n);
   const sum = a => a.reduce((s, v) => s + (v || 0), 0);
-  const uptime = s => {
-    const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
-    return d ? `${d}d ${h}h` : h ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
-  };
   const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const TABS = ['profile', 'resources', 'agents'];
-  const ORDER = { running: 0, sleeping: 1, idle: 2 };
-  const KEY = {
-    name: a => a.name.toLowerCase(), status: a => ORDER[a.status] ?? 3,
-    uptimeSec: a => a.uptimeSec, task: a => a.task.toLowerCase(),
-  };
+  const TABS = ['profile', 'resources'];
   const REFRESH_MS = 60 * 1000;
 
   let data = JSON.parse($('#cl-stats').textContent);
   let m = null;                       // derived view of `data`, rebuilt on every refresh
   let range = '24h';
-  let sortKey = 'status', sortDir = 1; // default: running first, then longest uptime
 
   function derive(d) {
-    const T = d.tokens, AG = d.agents;
+    const T = d.tokens;
     const hourTot = T.hourly.input.map((v, i) => v + T.hourly.output[i]);
     const dayTot = T.daily.input.map((v, i) => v == null ? null : v + T.daily.output[i]);
     let last = dayTot.length - 1; while (last > 0 && dayTot[last] == null) last--;   // index of "today"
     return {
-      T, AG, live: !d.sample, hourTot, dayTot, last,
+      T, live: !d.sample, hourTot, dayTot, last,
       H0: parseInt(T.hourly.start.slice(11, 13), 10),
       todayTot: T.today.input + T.today.output,
-      running: AG.filter(a => a.status === 'running'),
       snap: `${d.generatedAt.slice(0, 16).replace('T', ' ')} (UTC+8)`,
     };
   }
@@ -62,28 +50,19 @@
   const dayLabel = d => `${WD[d.getUTCDay()]} ${String(d.getUTCDate()).padStart(2, '0')}`;
   const iso = d => d.toISOString().slice(0, 10);
 
-  /* ---------- badges, status line, avatar light, toolbar sparkline ---------- */
+  /* ---------- badges, status line, toolbar sparkline ---------- */
   function renderBadges() {
     const live = m.live;
     document.documentElement.classList.toggle('is-live', live);
-    $('#live-pill').title = live ? 'live: agents from paseo, tokens from magpie'
-      : 'this tab is the live-updating one; for now it shows sample data';
     const sp = $('.spark');
     sp.title = live ? 'tokens per hour, last 24h (via magpie) — open Resources'
       : 'tokens per hour, last 24h (sample data) — open Resources';
     sp.setAttribute('aria-label', live ? 'token use, last 24 hours: open Resources'
       : 'token use, last 24 hours, sample data: open Resources');
-    $('.sb-mon').title = live ? 'agents from paseo, tokens from magpie' : 'sample data: fake numbers, not a live feed';
+    $('.sb-mon').title = live ? 'tokens from magpie' : 'sample data: fake numbers, not a live feed';
   }
   function renderStatus() {
-    set('sb-agents', m.running.length);
     set('sb-today', fmt(m.todayTot));
-    $$('.led').forEach(l => {
-      l.hidden = false;
-      l.classList.toggle('on', m.running.length > 0);
-      l.title = (m.running.length ? `${m.running.length} agents running` : 'no agents running') + (m.live ? '' : ' (sample)');
-      l.setAttribute('aria-label', l.title);
-    });
     const svg = $('#spark'), W = 72, H = 24, mx = Math.max(1, ...m.hourTot);
     svg.textContent = '';
     const pts = m.hourTot.map((v, i) => `${(i * W / (m.hourTot.length - 1)).toFixed(1)},${(H - 1 - v / mx * (H - 4)).toFixed(1)}`).join(' ');
@@ -182,14 +161,13 @@
 
   /* ---------- Resources: readouts + legend values ---------- */
   function renderReadouts() {
-    const { T, hourTot, dayTot, last, todayTot, running, AG, snap, live } = m;
+    const { T, hourTot, dayTot, last, todayTot, snap, live } = m;
     const nowH = hourTot.length - 1, peak = hourTot.indexOf(Math.max(...hourTot));
     set('lg-in', `today ${fmt(T.today.input)} · this hour ${fmt(T.hourly.input[nowH])}`);
     set('lg-out', `today ${fmt(T.today.output)} · this hour ${fmt(T.hourly.output[nowH])}`);
     set('r-today', fmt(todayTot)); set('r-in', fmt(T.today.input)); set('r-out', fmt(T.today.output));
     set('r-hour', fmt(hourTot[nowH])); set('r-peak', `${hourLabel(peak)} · ${fmt(hourTot[peak])}`);
     set('r-7d', fmt(sum(dayTot.slice(Math.max(0, last - 6), last + 1))));
-    set('r-run', `${running.length} of ${AG.length}`);
     set('ro-note', `${live ? 'magpie' : 'sample'} snapshot ${snap}; "this hour" is still filling.`);
   }
 
@@ -214,42 +192,10 @@
   }
   $('#heat').addEventListener('mouseover', e => { if (e.target.dataset.label) set('heat-read', e.target.dataset.label); });
 
-  /* ---------- Agents: sortable tree view ---------- */
-  function renderAgents() {
-    const rows = m.AG.slice().sort((a, b) => {
-      const p = KEY[sortKey](a), q = KEY[sortKey](b);
-      return ((p > q) - (p < q)) * sortDir                            // ties: status groups by uptime desc, else by name
-        || (sortKey === 'status' ? b.uptimeSec - a.uptimeSec : 0) || a.name.localeCompare(b.name);
-    });
-    const tb = $('#agents-body');
-    tb.textContent = '';
-    rows.forEach(a => {
-      const tr = el('tr', {}, tb);
-      const name = el('td', { class: 'c-name' }, tr), st = el('td', { class: 'c-status' }, tr);
-      el('use', { href: '#i-agent' }, el('svg', { class: 'ic', 'aria-hidden': 'true' }, name, 1), 1);
-      name.append(a.name);
-      el('span', { class: 'st st-' + a.status, 'aria-hidden': 'true' }, st);
-      st.append(a.status);
-      el('td', { class: 'c-up num', 'data-label': 'up', text: uptime(a.uptimeSec) }, tr);
-      el('td', { class: 'c-task', text: a.task }, tr);
-    });
-    $$('#agents-table th').forEach(th => th.dataset.key === sortKey
-      ? th.setAttribute('aria-sort', sortDir > 0 ? 'ascending' : 'descending') : th.removeAttribute('aria-sort'));
-    const r = m.running.length, sl = m.AG.filter(a => a.status === 'sleeping').length, id = m.AG.filter(a => a.status === 'idle').length;
-    set('ag-sum', `${r} running · ${sl} sleeping · ${id} idle`);
-    set('ag-src', `agents from paseo · ${m.live ? '' : 'sample '}snapshot ${m.snap}`);
-  }
-  $$('#agents-table th button').forEach(b => b.addEventListener('click', () => {
-    const k = b.parentNode.dataset.key;                               // same column flips, new column starts sensible
-    sortDir = k === sortKey ? -sortDir : (k === 'uptimeSec' ? -1 : 1);
-    sortKey = k;
-    renderAgents();
-  }));
-
   /* ---------- render everything from the current feed ---------- */
   function render() {
     m = derive(data);
-    renderBadges(); renderStatus(); renderReadouts(); renderHeat(); renderGraph(); renderAgents();
+    renderBadges(); renderStatus(); renderReadouts(); renderHeat(); renderGraph();
   }
   function renderGraph() { drawGraph(); }
 

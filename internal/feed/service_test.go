@@ -40,15 +40,6 @@ func (f *fakeTokens) Usage(context.Context, time.Time) ([]Bucket, error) {
 	return f.buckets, f.err
 }
 
-type fakeAgents struct {
-	agents []Agent
-	err    error
-}
-
-func (f *fakeAgents) Agents(context.Context) ([]Agent, error) {
-	return f.agents, f.err
-}
-
 func ptrValue(p *int64) int64 {
 	if p == nil {
 		return -1
@@ -64,7 +55,7 @@ func TestTodayAndHourlyFollowUTC8Midnight(t *testing.T) {
 	}}
 	feedAt := func(ts string) Feed {
 		now := mustTime(t, ts)
-		return New(Config{Location: loc, TTL: time.Minute, Now: func() time.Time { return now }}, src, nil).Feed()
+		return New(Config{Location: loc, TTL: time.Minute, Now: func() time.Time { return now }}, src).Feed()
 	}
 
 	before := feedAt("2026-10-09T15:59:59Z")
@@ -108,13 +99,10 @@ func TestTodayAndHourlyFollowUTC8Midnight(t *testing.T) {
 func TestUnconfiguredUpstreamsServeSample(t *testing.T) {
 	loc := mustLocation(t)
 	now := mustTime(t, "2026-10-10T17:00:00+08:00")
-	f := New(Config{Location: loc, TTL: time.Minute, Now: func() time.Time { return now }}, nil, nil).Feed()
+	f := New(Config{Location: loc, TTL: time.Minute, Now: func() time.Time { return now }}, nil).Feed()
 
 	if !f.Sample {
 		t.Error("unconfigured upstreams must report sample: true")
-	}
-	if len(f.Agents) != 9 {
-		t.Errorf("sample agents = %d, want 9", len(f.Agents))
 	}
 	if len(f.Tokens.Daily.Input) != dailyDays || len(f.Tokens.Hourly.Input) != hourlyWindow {
 		t.Errorf("window sizes daily=%d hourly=%d", len(f.Tokens.Daily.Input), len(f.Tokens.Hourly.Input))
@@ -131,10 +119,9 @@ func TestFallbackServesLastGoodThenSample(t *testing.T) {
 	loc := mustLocation(t)
 	clock := mustTime(t, "2026-10-10T12:00:00+08:00")
 	src := &fakeTokens{err: errors.New("down")}
-	agents := &fakeAgents{agents: []Agent{{Name: "Live", Status: "running", UptimeSec: 60, Task: "x"}}}
-	svc := New(Config{Location: loc, TTL: 30 * time.Second, Now: func() time.Time { return clock }}, src, agents)
+	svc := New(Config{Location: loc, TTL: 30 * time.Second, Now: func() time.Time { return clock }}, src)
 
-	// Magpie is down from the start: its half falls back to sample; paseo is fine.
+	// Magpie is down from the start: the feed falls back to sample.
 	if f := svc.Feed(); !f.Sample || f.Tokens.Today != (Pair{Input: sampleTodayInput, Output: sampleTodayOutput}) {
 		t.Fatalf("no prior value: want sample tokens, got sample=%v today=%+v", f.Sample, f.Tokens.Today)
 	}
@@ -155,7 +142,7 @@ func TestFallbackServesLastGoodThenSample(t *testing.T) {
 	src.buckets = []Bucket{{Start: mustTime(t, "2026-10-10T11:00:00+08:00"), Input: 5000, Output: 500}}
 	f := svc.Feed()
 	if f.Sample {
-		t.Error("recovered magpie and paseo: sample must be false")
+		t.Error("recovered magpie: sample must be false")
 	}
 	if f.Tokens.Today != (Pair{Input: 5000, Output: 500}) {
 		t.Errorf("recovered today = %+v", f.Tokens.Today)
@@ -194,31 +181,23 @@ func TestHTTPUpstreamsFallbackAndRecover(t *testing.T) {
 		}})
 	}))
 	defer magpie.Close()
-	paseo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer "+token {
-			http.Error(w, "unauthorised", http.StatusUnauthorized)
-			return
-		}
-		json.NewEncoder(w).Encode([]Agent{{Name: "Stub", Status: "idle", UptimeSec: 10, Task: "no task"}})
-	}))
-	defer paseo.Close()
 
 	cfg := Config{Location: loc, TTL: time.Minute, Now: func() time.Time { return now }}
-	up := New(cfg, NewMagpie(magpie.URL, token), NewPaseo(paseo.URL, token)).Feed()
+	up := New(cfg, NewMagpie(magpie.URL, token)).Feed()
 	if up.Sample {
 		t.Error("stub upstreams up: sample must be false")
 	}
-	if up.Tokens.Today != (Pair{Input: 7000, Output: 700}) || len(up.Agents) != 1 || up.Agents[0].Name != "Stub" {
-		t.Errorf("live feed = today %+v agents %+v", up.Tokens.Today, up.Agents)
+	if up.Tokens.Today != (Pair{Input: 7000, Output: 700}) {
+		t.Errorf("live feed = today %+v", up.Tokens.Today)
 	}
 
-	// Both upstreams unreachable: sample for both, no panic, same shape.
+	// Magpie unreachable: sample, no panic, same shape.
 	gone := httptest.NewServer(http.NotFoundHandler())
 	goneURL := gone.URL
 	gone.Close()
-	down := New(cfg, NewMagpie(goneURL, token), NewPaseo(goneURL, token)).Feed()
-	if !down.Sample || len(down.Agents) != 9 {
-		t.Errorf("unreachable upstreams: sample=%v agents=%d, want sample with 9 agents", down.Sample, len(down.Agents))
+	down := New(cfg, NewMagpie(goneURL, token)).Feed()
+	if !down.Sample {
+		t.Errorf("unreachable magpie: sample=%v, want true", down.Sample)
 	}
 }
 
@@ -227,7 +206,7 @@ func TestClientErrorsDoNotLeakToken(t *testing.T) {
 		http.Error(w, "nope", http.StatusForbidden)
 	}))
 	defer srv.Close()
-	_, err := NewPaseo(srv.URL, "s3cret").Agents(context.Background())
+	_, err := NewMagpie(srv.URL, "s3cret").Usage(context.Background(), time.Now())
 	if err == nil || !strings.Contains(err.Error(), "HTTP 403") {
 		t.Fatalf("err = %v, want HTTP 403", err)
 	}
