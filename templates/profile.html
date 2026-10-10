@@ -1,0 +1,130 @@
+{{define "profile"}}
+<div id="profile" class="tabpanel on" role="tabpanel" aria-labelledby="tab-profile">
+
+  <header class="masthead">
+    <div class="mast-id">
+      <span class="photo mast-avatar"><img src="/static/avatar.jpg" alt="Noa's avatar" width="88" height="88"><span class="led" role="img" hidden></span></span>
+      <div>
+        <p class="kicker">know noa in 5 minutes</p>
+        <h1>Noa Virellia <span class="alias"><span class="slash" aria-hidden="true">／</span>pelikanade</span></h1>
+      </div>
+    </div>
+    <div class="mast-lede">
+      <p class="lede">full-spectrum developer · she/they</p>
+      <p class="motto">Trusted foundations. For the postmodern age. <span class="src">— GitHub README</span></p>
+    </div>
+  </header>
+
+  <div class="panes">
+    <div class="mainpane">
+      <section aria-labelledby="h-who">
+        <h2 class="sec-h" id="h-who">Who</h2>
+        <div class="indent bio">
+          <p>i'm noa — a full-spectrum developer who thinks systems should be warm environments for people, not cold monuments to engineering.</p>
+          <p>i treat tooling as part of the thinking process, and keep refining environments, abstractions and workflows until the friction mostly disappears. the systems i make follow that instinct: immutable, declarative, reproducible, and designed with usability in mind.</p>
+          <p>i've shipped infrastructure serving 800k+ users. right now: agentic tools, developer experience with nix, and formal verification of llm-generated code.</p>
+        </div>
+      </section>
+
+      <section aria-labelledby="h-making">
+        <h2 class="sec-h" id="h-making">What i maintain <span class="aside">featured in the README</span></h2>
+        <div class="indent">
+          <div class="projects">
+            <article class="frame proj" aria-labelledby="p-flake">
+              <h3 class="legend" id="p-flake"><svg class="ic" aria-hidden="true"><use href="#i-repo"/></svg>flake</h3>
+              <span class="tag">NixOS / config</span>
+              <p class="lead">my NixOS config.</p>
+              <p class="detail">the one that propelled me into the immutable everything field (thank you).</p>
+              <p class="act"><a class="btn" href="https://github.com/pelikanade/flake">learn more on github.com<span class="vh"> about flake</span> <span class="arr" aria-hidden="true">↗</span></a></p>
+            </article>
+            <article class="frame proj" aria-labelledby="p-nixpkgs">
+              <h3 class="legend" id="p-nixpkgs"><svg class="ic" aria-hidden="true"><use href="#i-repo"/></svg>nixpkgs</h3>
+              <span class="tag">Nix / packaging</span>
+              <p class="lead">package maintainer.</p>
+              <p class="detail">sometimes i also vendor packages in my own flake and others'.</p>
+              <p class="act"><a class="btn" href="https://github.com/pelikanade/nixpkgs">learn more on github.com<span class="vh"> about nixpkgs</span> <span class="arr" aria-hidden="true">↗</span></a></p>
+            </article>
+            <article class="frame proj" aria-labelledby="p-dsh">
+              <h3 class="legend" id="p-dsh"><svg class="ic" aria-hidden="true"><use href="#i-repo"/></svg>nvirellias-dsh-nuts</h3>
+              <span class="tag">Agents / tooling</span>
+              <p class="lead">my personal dsh (deepseek harness) package repository.</p>
+              <p class="detail">curated skills, plus a devenv plugin for portable development environments.</p>
+              <p class="act"><a class="btn" href="https://github.com/pelikanade/nvirellias-dsh-nuts">learn more on github.com<span class="vh"> about nvirellias-dsh-nuts</span> <span class="arr" aria-hidden="true">↗</span></a></p>
+            </article>
+            <article class="frame proj" aria-labelledby="p-astro">
+              <h3 class="legend" id="p-astro"><svg class="ic" aria-hidden="true"><use href="#i-repo"/></svg>astro-llm-translator</h3>
+              <span class="tag">Astro / LLM</span>
+              <p class="lead">making LLMs translate my docs so i don't have to.</p>
+              <p class="detail">from the “other works” shelf.</p>
+              <p class="act"><a class="btn" href="https://github.com/pelikanade/astro-llm-translator">learn more on github.com<span class="vh"> about astro-llm-translator</span> <span class="arr" aria-hidden="true">↗</span></a></p>
+            </article>
+          </div>
+          <p class="archived"><span class="lbl-sm">retired &amp; archived</span>sidebery-chromium · aster · mimosa · reverie</p>
+        </div>
+      </section>
+
+      <div class="lower">
+        <section class="frame" aria-labelledby="h-skills">
+          <h2 class="legend" id="h-skills"><svg class="ic" aria-hidden="true"><use href="#i-tools"/></svg>Skills &amp; direction</h2>
+          <div class="skill-row">
+            <span class="lbl-sm" id="s-daily">daily</span>
+            <ul class="pills" aria-labelledby="s-daily"><li class="pill">NixOS</li><li class="pill">Nix</li><li class="pill">declarative ops</li><li class="pill">immutable OS</li><li class="pill">homelab</li></ul>
+          </div>
+          <div class="skill-row">
+            <span class="lbl-sm" id="s-now">now</span>
+            <ul class="pills now" aria-labelledby="s-now"><li class="pill">agentic tools</li><li class="pill">developer experience</li><li class="pill">formal verification of LLM code</li></ul>
+          </div>
+          <div class="skill-row">
+            <span class="lbl-sm" id="s-ws">workstation</span>
+            <ul class="pills" aria-labelledby="s-ws"><li class="pill">Zed</li><li class="pill">VSCode</li><li class="pill">Firefox w/ sidebery</li><li class="pill">omp</li><li class="pill">dsh</li><li class="pill">codex</li><li class="pill">paseo</li></ul>
+          </div>
+        </section>
+
+        <section class="frame" aria-labelledby="h-know">
+          <h2 class="legend" id="h-know"><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg>Things you might want to know</h2>
+          <ul class="know">
+            <li><svg class="ic" aria-hidden="true"><use href="#i-bud"/></svg>i name my servers after plants.</li>
+            <li><svg class="ic" aria-hidden="true"><use href="#i-bud"/></svg>i once made a systemd timer that reminds me to take my meds.</li>
+            <li><svg class="ic" aria-hidden="true"><use href="#i-bud"/></svg>i <a href="https://www.youtube.com/watch?v=WLRRJjACyBs">gave talks</a> at nix meetups in china about convincing companies to use nix (mixed results), and have helped host the event since meetup #2.</li>
+            <li><svg class="ic" aria-hidden="true"><use href="#i-bud"/></svg>vrchat photography and avatar work.</li>
+            <li><svg class="ic" aria-hidden="true"><use href="#i-bud"/></svg>generally, tending flowers in the wires.</li>
+          </ul>
+        </section>
+      </div>
+
+      <img class="watermark" src="/static/watermark.svg" alt="" aria-hidden="true">
+    </div>
+
+    <aside class="sidepane" aria-label="Facts and links">
+      <div class="pane-group">
+        <h2 class="pane-head" id="h-about">About</h2>
+        <ul class="sunken rows" aria-labelledby="h-about">
+          <li class="photo-row"><span class="photo"><img src="/static/avatar.jpg" alt="Noa's avatar" width="88" height="88"><span class="led" role="img" hidden></span></span>
+            <span class="photo-cap"><b>Noa Virellia</b><br>pelikanade<br>she/they</span></li>
+          <li><svg class="ic" aria-hidden="true"><use href="#i-gear"/></svg><span class="kv"><span class="lbl-sm">status</span><span class="val">working on agentic tools, developer experience with nix, and formal verification of llm-generated code</span></span></li>
+          <li><svg class="ic" aria-hidden="true"><use href="#i-heart"/></svg><span class="kv"><span class="lbl-sm">likes</span><span class="val">config tweaking, homelab, yapping, ZZZ</span></span></li>
+          <li><svg class="ic" aria-hidden="true"><use href="#i-leaf"/></svg><span class="kv"><span class="lbl-sm">servers</span><span class="val">named after plants</span></span></li>
+          <li><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg><span class="kv"><span class="lbl-sm">time</span><span class="val">UTC+8</span></span></li>
+          <li><svg class="ic" aria-hidden="true"><use href="#i-person"/></svg><span class="kv"><span class="lbl-sm">pronouns</span><span class="val">she/they</span></span></li>
+        </ul>
+      </div>
+      <div class="pane-group">
+        <h2 class="pane-head" id="h-contact">Contact</h2>
+        <ul class="sunken rows" aria-labelledby="h-contact">
+          <li><svg class="ic" aria-hidden="true"><use href="#i-mail"/></svg><span class="kv"><span class="lbl-sm">email</span><a class="val" href="mailto:i@nvirellia.im">i@nvirellia.im</a></span></li>
+          <li><svg class="ic" aria-hidden="true"><use href="#i-plane"/></svg><span class="kv"><span class="lbl-sm">telegram</span><a class="val" href="https://t.me/noa_virellia">@noa_virellia</a></span></li>
+        </ul>
+      </div>
+      <div class="pane-group">
+        <h2 class="pane-head" id="h-ids">Identities</h2>
+        <ul class="sunken rows" aria-labelledby="h-ids">
+          <li><svg class="ic" aria-hidden="true"><use href="#i-repo"/></svg><span class="kv"><span class="lbl-sm">github</span><a class="val" href="https://github.com/pelikanade">pelikanade</a></span></li>
+          <li><svg class="ic" aria-hidden="true"><use href="#i-globe"/></svg><span class="kv"><span class="lbl-sm">site</span><a class="val" href="https://nvirellia.im">nvirellia.im</a></span></li>
+          <li><svg class="ic" aria-hidden="true"><use href="#i-porch"/></svg><span class="kv"><span class="lbl-sm">nekoweb porch</span><a class="val" href="https://pelikanade.nekoweb.org/">pelikanade.nekoweb.org</a></span></li>
+          <li><svg class="ic" aria-hidden="true"><use href="#i-net"/></svg><span class="kv"><span class="lbl-sm">dn42</span><span class="val mono">AS4242420833</span></span></li>
+        </ul>
+      </div>
+    </aside>
+  </div>
+</div><!-- /profile -->
+{{end}}

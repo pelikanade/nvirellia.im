@@ -1,0 +1,46 @@
+{{define "resources"}}
+<section id="resources" class="mon tabpanel" role="tabpanel" aria-labelledby="tab-resources">
+  <div class="mon-head">
+    <h2>Resources</h2>
+    <span class="aside">llm tokens my agents burn through, via magpie</span>
+    <span class="badge-sample" title="sample data: the live feed is unavailable, so these numbers are placeholders">sample data</span>
+    <span class="nojs-only aside">the graph and heatmap need javascript; every number below is here.</span>
+  </div>
+  <section class="frame js-only" aria-labelledby="h-hist">
+    <h3 class="legend" id="h-hist"><svg class="ic" aria-hidden="true"><use href="#i-chart"/></svg>Token History</h3>
+    <div class="frame-tools">
+      <p class="cap" id="graph-cap">tokens per hour, last 24 hours</p>
+      <div class="toggles" role="group" aria-label="Time range">
+        <button type="button" class="btn" data-range="24h" aria-pressed="true">24h</button>
+        <button type="button" class="btn" data-range="7d" aria-pressed="false">7d</button>
+      </div>
+    </div>
+    <svg class="graph" id="graph" role="img" aria-label="token history graph"></svg>
+    <div class="legend-row">
+      <p class="lg"><span class="sw in" aria-hidden="true"></span><b>Input</b><span class="v" id="lg-in">{{.Legend.In}}</span></p>
+      <p class="lg"><span class="sw out" aria-hidden="true"></span><b>Output</b><span class="v" id="lg-out">{{.Legend.Out}}</span></p>
+    </div>
+  </section>
+  <div class="mon-row">
+    <section class="frame js-only" aria-labelledby="h-heat">
+      <h3 class="legend" id="h-heat"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg>Activity, last 16 weeks</h3>
+      <div class="heat" id="heat" role="img" aria-label="token activity per day for 16 weeks"></div>
+      <div class="heat-foot"><span>tokens per day</span><span class="scale" aria-hidden="true">less <span class="hc l0"></span><span class="hc l1"></span><span class="hc l2"></span><span class="hc l3"></span><span class="hc l4"></span> more</span></div>
+      <p class="heat-read" id="heat-read" aria-hidden="true">point at a day to see its total.</p>
+    </section>
+    <section class="frame" aria-labelledby="h-today">
+      <h3 class="legend" id="h-today"><svg class="ic" aria-hidden="true"><use href="#i-gear"/></svg>Today</h3>
+      <dl class="readouts">
+        <div class="big"><dt>tokens today</dt><dd id="r-today">{{.Readouts.Today}}</dd></div>
+        <div><dt>input</dt><dd id="r-in">{{.Readouts.Input}}</dd></div>
+        <div><dt>output</dt><dd id="r-out">{{.Readouts.Output}}</dd></div>
+        <div><dt>this hour</dt><dd id="r-hour">{{.Readouts.ThisHour}}</dd></div>
+        <div><dt>busiest hour</dt><dd id="r-peak">{{.Readouts.Peak}}</dd></div>
+        <div><dt>last 7 days</dt><dd id="r-7d">{{.Readouts.Last7d}}</dd></div>
+        <div><dt>agents running</dt><dd id="r-run">{{.Readouts.Running}}</dd></div>
+      </dl>
+      <p class="ro-note" id="ro-note">{{.Readouts.Note}}</p>
+    </section>
+  </div>
+</section>
+{{end}}
