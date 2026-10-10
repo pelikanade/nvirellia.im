@@ -1,0 +1,26 @@
+{{define "readouts-dl"}}
+<dl class="readouts" id="readouts">
+<div class="big"><dt>tokens today</dt><dd id="r-today">{{.Today}}</dd></div>
+<div><dt>input</dt><dd id="r-in">{{.Input}}</dd></div>
+<div><dt>output</dt><dd id="r-out">{{.Output}}</dd></div>
+<div><dt>this hour</dt><dd id="r-hour">{{.ThisHour}}</dd></div>
+<div><dt>busiest hour</dt><dd id="r-peak">{{.Peak}}</dd></div>
+<div><dt>last 7 days</dt><dd id="r-7d">{{.Last7d}}</dd></div>
+</dl>
+{{end}}
+
+{{define "ro-note"}}<p class="ro-note" id="ro-note">{{.Note}}</p>{{end}}
+
+{{define "legend-in"}}<span class="v" id="lg-in">{{.}}</span>{{end}}
+
+{{define "legend-out"}}<span class="v" id="lg-out">{{.}}</span>{{end}}
+
+{{define "sb-today"}}<b id="sb-today">{{.}}</b>{{end}}
+
+{{define "live-fragment"}}{{if .Resources}}
+{{template "readouts-dl" .Readouts}}
+{{template "ro-note" .Readouts}}
+{{template "legend-in" .Legend.In}}
+{{template "legend-out" .Legend.Out}}
+{{template "sb-today" .Readouts.Today}}
+{{end}}{{end}}

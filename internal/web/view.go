@@ -14,12 +14,12 @@ import (
 
 // page is the template data for the sheet. Field names are used by templates/*.html.
 type page struct {
-	Live     bool
-	Dev      bool
-	FeedJSON template.JS
-	Updated  string
-	Readouts readouts
-	Legend   legend
+	Resources bool // magpie has data: the Resources tab, its panel, and the status readouts render
+	Dev       bool
+	FeedJSON  template.JS
+	Updated   string
+	Readouts  readouts
+	Legend    legend
 }
 
 type readouts struct {
@@ -36,16 +36,20 @@ func newPage(f feed.Feed) (page, error) {
 	if err != nil {
 		return page{}, fmt.Errorf("generatedAt: %w", err)
 	}
-	hourStart, err := time.Parse(time.RFC3339, f.Tokens.Hourly.Start)
-	if err != nil {
-		return page{}, fmt.Errorf("hourly start: %w", err)
-	}
 	feedJSON, err := json.Marshal(f)
 	if err != nil {
 		return page{}, err
 	}
+	p := page{FeedJSON: template.JS(feedJSON), Updated: generated.Format("2006-01-02")}
+	if f.Tokens == nil {
+		return p, nil
+	}
+	hourStart, err := time.Parse(time.RFC3339, f.Tokens.Hourly.Start)
+	if err != nil {
+		return page{}, fmt.Errorf("hourly start: %w", err)
+	}
 
-	t := f.Tokens
+	t := *f.Tokens
 	hourTot := make([]int64, len(t.Hourly.Input))
 	for i := range hourTot {
 		hourTot[i] = t.Hourly.Input[i] + t.Hourly.Output[i]
@@ -61,7 +65,7 @@ func newPage(f feed.Feed) (page, error) {
 		last = i
 	}
 
-	nowH := len(hourTot) - 1
+	nowH := generated.Hour() // hourly starts at local midnight, so the index is the hour
 	peak := slices.Index(hourTot, slices.Max(hourTot))
 	var last7 int64
 	for i := max(0, last-6); i <= last; i++ {
@@ -72,28 +76,21 @@ func newPage(f feed.Feed) (page, error) {
 	todayTot := t.Today.Input + t.Today.Output
 
 	snapshotLabel := generated.Format("2006-01-02 15:04") + " (UTC+8)"
-	source := "magpie"
-	if f.Sample {
-		source = "sample"
+	p.Resources = true
+	p.Readouts = readouts{
+		Today:    fmtTokens(todayTot),
+		Input:    fmtTokens(t.Today.Input),
+		Output:   fmtTokens(t.Today.Output),
+		ThisHour: fmtTokens(hourTot[nowH]),
+		Peak:     fmt.Sprintf("%s · %s", hourLabel(hourStart, peak), fmtTokens(hourTot[peak])),
+		Last7d:   fmtTokens(last7),
+		Note:     fmt.Sprintf("magpie snapshot %s; \"this hour\" is still filling.", snapshotLabel),
 	}
-	return page{
-		Live:     !f.Sample,
-		FeedJSON: template.JS(feedJSON),
-		Updated:  generated.Format("2006-01-02"),
-		Readouts: readouts{
-			Today:    fmtTokens(todayTot),
-			Input:    fmtTokens(t.Today.Input),
-			Output:   fmtTokens(t.Today.Output),
-			ThisHour: fmtTokens(hourTot[nowH]),
-			Peak:     fmt.Sprintf("%s · %s", hourLabel(hourStart, peak), fmtTokens(hourTot[peak])),
-			Last7d:   fmtTokens(last7),
-			Note:     fmt.Sprintf("%s snapshot %s; \"this hour\" is still filling.", source, snapshotLabel),
-		},
-		Legend: legend{
-			In:  fmt.Sprintf("today %s · this hour %s", fmtTokens(t.Today.Input), fmtTokens(t.Hourly.Input[nowH])),
-			Out: fmt.Sprintf("today %s · this hour %s", fmtTokens(t.Today.Output), fmtTokens(t.Hourly.Output[nowH])),
-		},
-	}, nil
+	p.Legend = legend{
+		In:  fmt.Sprintf("today %s · this hour %s", fmtTokens(t.Today.Input), fmtTokens(t.Hourly.Input[nowH])),
+		Out: fmt.Sprintf("today %s · this hour %s", fmtTokens(t.Today.Output), fmtTokens(t.Hourly.Output[nowH])),
+	}
+	return p, nil
 }
 
 // hourLabel is the "HH:00" label of the hour at index i past the window start.

@@ -19,25 +19,28 @@ import (
 )
 
 type config struct {
-	ListenAddr  string
-	FeedTTL     time.Duration
-	MagpieURL   string
-	MagpieToken string
+	ListenAddr string
+	FeedTTL    time.Duration
+	MagpieURL  string
+	MagpieKey  string
 }
 
 // loadConfig reads the environment. An unset MAGPIE_URL leaves magpie unconfigured,
-// which serves sample data.
+// so the sheet renders without the Resources panel.
 func loadConfig(getenv func(string) string) (config, error) {
 	c := config{
-		ListenAddr:  orDefault(getenv("LISTEN_ADDR"), ":8080"),
-		MagpieURL:   getenv("MAGPIE_URL"),
-		MagpieToken: getenv("MAGPIE_TOKEN"),
+		ListenAddr: orDefault(getenv("LISTEN_ADDR"), ":8080"),
+		MagpieURL:  getenv("MAGPIE_URL"),
+		MagpieKey:  getenv("MAGPIE_WEB_KEY"),
 	}
 	ttl, err := time.ParseDuration(orDefault(getenv("FEED_TTL"), "30s"))
 	if err != nil {
 		return config{}, fmt.Errorf("FEED_TTL: %w", err)
 	}
 	c.FeedTTL = ttl
+	if c.MagpieURL != "" && c.MagpieKey == "" {
+		return config{}, errors.New("MAGPIE_WEB_KEY is required when MAGPIE_URL is set")
+	}
 	return c, nil
 }
 
@@ -49,6 +52,9 @@ func orDefault(v, def string) string {
 }
 
 func main() {
+	if err := loadDotEnv(".env"); err != nil {
+		log.Fatal(err)
+	}
 	var err error
 	if len(os.Args) > 1 && os.Args[1] == "dev" {
 		err = runDev()
@@ -72,7 +78,11 @@ func run() error {
 
 	var tokens feed.TokenSource
 	if cfg.MagpieURL != "" {
-		tokens = feed.NewMagpie(cfg.MagpieURL, cfg.MagpieToken)
+		magpie, err := feed.NewMagpie(cfg.MagpieURL, cfg.MagpieKey)
+		if err != nil {
+			return err
+		}
+		tokens = magpie
 	}
 	svc := feed.New(feed.Config{Location: loc, TTL: cfg.FeedTTL}, tokens)
 

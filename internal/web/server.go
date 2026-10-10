@@ -55,6 +55,7 @@ func buildHandler(feeds Feeds, assets fs.FS, hub *dev.Hub) (http.Handler, error)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.index)
 	mux.HandleFunc("GET /api/stats.json", s.stats)
+	mux.HandleFunc("GET /fragments/readouts", s.readouts)
 	mux.HandleFunc("GET /healthz", healthz)
 	if hub != nil {
 		mux.Handle("GET /dev/events", hub)
@@ -76,15 +77,29 @@ func noStore(h http.Handler) http.Handler {
 	})
 }
 
+// templates returns the page templates. Dev mode re-parses them so edits show on reload.
+func (s *server) templates() (*template.Template, error) {
+	if s.hub == nil {
+		return s.pages, nil
+	}
+	return parseTemplates(s.assets)
+}
+
 func (s *server) index(w http.ResponseWriter, _ *http.Request) {
-	pages := s.pages
-	if s.hub != nil {
-		var err error
-		if pages, err = parseTemplates(s.assets); err != nil {
-			log.Printf("web: parse templates: %v", err)
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
+	s.render(w, "layout.html")
+}
+
+// readouts serves the values the page refreshes every 60 s. It shares partials with the page.
+func (s *server) readouts(w http.ResponseWriter, _ *http.Request) {
+	s.render(w, "live-fragment")
+}
+
+func (s *server) render(w http.ResponseWriter, name string) {
+	pages, err := s.templates()
+	if err != nil {
+		log.Printf("web: parse templates: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
 	}
 	p, err := newPage(s.feeds.Feed())
 	if err != nil {
@@ -94,8 +109,8 @@ func (s *server) index(w http.ResponseWriter, _ *http.Request) {
 	}
 	p.Dev = s.hub != nil
 	var buf bytes.Buffer
-	if err := pages.ExecuteTemplate(&buf, "layout.html", p); err != nil {
-		log.Printf("web: render page: %v", err)
+	if err := pages.ExecuteTemplate(&buf, name, p); err != nil {
+		log.Printf("web: render %s: %v", name, err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}

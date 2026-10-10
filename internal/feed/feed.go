@@ -1,5 +1,5 @@
-// Package feed builds the nvirellia.im feed: token windows from magpie, falling
-// back to sample data while magpie is unavailable.
+// Package feed builds the nvirellia.im feed: token windows from magpie. Tokens is
+// nil while magpie has no data (unconfigured, unreachable, or no buckets).
 package feed
 
 import (
@@ -22,10 +22,9 @@ func Location() (*time.Location, error) {
 
 // Feed is the body of GET /api/stats.json.
 type Feed struct {
-	Sample      bool   `json:"sample"`
-	GeneratedAt string `json:"generatedAt"`
-	TZ          string `json:"tz"`
-	Tokens      Tokens `json:"tokens"`
+	GeneratedAt string  `json:"generatedAt"`
+	TZ          string  `json:"tz"`
+	Tokens      *Tokens `json:"tokens"`
 }
 
 // Tokens is the magpie-derived part of the feed.
@@ -41,28 +40,35 @@ type Pair struct {
 	Output int64 `json:"output"`
 }
 
-// Hourly is the last 24 hours, oldest first; the last entry is the current hour.
+// Hourly is today's 24 local hours, oldest first; hours after now are zero.
 type Hourly struct {
 	Start  string  `json:"start"`
 	Input  []int64 `json:"input"`
 	Output []int64 `json:"output"`
 }
 
-// Daily is 16 Monday-first weeks; nil entries are days after today.
+// Daily is 16 Monday-first weeks; nil entries are days after today, and days before magpie's first record are zero.
 type Daily struct {
 	Start  string   `json:"start"`
 	Input  []*int64 `json:"input"`
 	Output []*int64 `json:"output"`
 }
 
-// Bucket is one hour of magpie usage, keyed by its start instant.
+// Bucket is magpie usage for one local hour or day, keyed by its start instant.
 type Bucket struct {
 	Start  time.Time `json:"start"`
 	Input  int64     `json:"input"`
 	Output int64     `json:"output"`
 }
 
-// Window sizes shared by aggregation and sample layout.
+// Usage is magpie's token usage as the feed reads it: today's hourly buckets and
+// the per-day buckets from magpie's first usage record.
+type Usage struct {
+	Hours []Bucket
+	Days  []Bucket
+}
+
+// Window sizes shared by aggregation and the daily layout.
 const (
 	hourlyWindow = 24
 	dailyWeeks   = 16

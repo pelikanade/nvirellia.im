@@ -5,9 +5,9 @@ import (
 	"time"
 )
 
-// TokenSource fetches hourly magpie usage covering at least since..now.
+// TokenSource fetches magpie's token usage.
 type TokenSource interface {
-	Usage(ctx context.Context, since time.Time) ([]Bucket, error)
+	Usage(ctx context.Context) (Usage, error)
 }
 
 // Config holds the feed's timing. Zero values take the defaults noted below.
@@ -23,11 +23,10 @@ type Config struct {
 type Service struct {
 	loc    *time.Location
 	now    func() time.Time
-	tokens *cached[[]Bucket]
+	tokens *cached[Usage]
 }
 
-// New wires the service. A nil source means that upstream is unconfigured: its
-// half of the feed is always sample data.
+// New wires the service. A nil source means magpie is unconfigured, so Tokens is nil.
 func New(cfg Config, tokens TokenSource) *Service {
 	if cfg.Location == nil {
 		cfg.Location = time.UTC
@@ -43,31 +42,27 @@ func New(cfg Config, tokens TokenSource) *Service {
 	}
 	s := &Service{loc: cfg.Location, now: cfg.Now}
 
-	var fetchTokens func(context.Context) ([]Bucket, error)
+	var fetchTokens func(context.Context) (Usage, error)
 	if tokens != nil {
-		fetchTokens = func(ctx context.Context) ([]Bucket, error) {
-			return tokens.Usage(ctx, windowStart(s.now(), s.loc))
-		}
+		fetchTokens = tokens.Usage
 	}
-	s.tokens = &cached[[]Bucket]{name: "magpie", fetch: fetchTokens, now: cfg.Now,
+	s.tokens = &cached[Usage]{name: "magpie", fetch: fetchTokens, now: cfg.Now,
 		ttl: cfg.TTL, timeout: cfg.Timeout, maxStale: cfg.MaxStale}
 	return s
 }
 
-// Feed returns the current snapshot. Sample is true while magpie is unconfigured
-// or unreachable (including when stale data is being served).
+// Feed returns the current snapshot. Tokens is nil while magpie is unconfigured,
+// unreachable with no last-good value within MaxStale, or has returned no buckets.
 func (s *Service) Feed() Feed {
 	now := s.now()
-	buckets, haveTokens, freshTokens := s.tokens.get()
-	tokens := sampleTokens(now, s.loc)
-	if haveTokens {
-		tokens = aggregate(buckets, now, s.loc)
-	}
-
-	return Feed{
-		Sample:      !freshTokens,
+	f := Feed{
 		GeneratedAt: now.In(s.loc).Format(time.RFC3339),
 		TZ:          s.loc.String(),
-		Tokens:      tokens,
 	}
+	usage, have, _ := s.tokens.get()
+	if have && (len(usage.Hours) > 0 || len(usage.Days) > 0) {
+		t := aggregate(usage, now, s.loc)
+		f.Tokens = &t
+	}
+	return f
 }
