@@ -304,6 +304,7 @@ code, .mono { font-family: var(--cl-mono); font-size: 12px; }
 .a-out { fill: url(#g-out); } .l-out { fill: none; stroke: #ce5c00; stroke-width: 2; stroke-linejoin: round; }
 .d-in { fill: var(--cl-link); } .d-out { fill: #ce5c00; }
 .g-hit { fill: transparent; } .g-hit:hover { fill: rgba(52,101,164,.08); }
+.g-now { stroke: var(--cl-link); stroke-width: 1; stroke-dasharray: 3 2; }
 
 /* legend + readouts, System Monitor style: swatch, name, values */
 .legend-row { display: flex; flex-wrap: wrap; gap: 8px 34px; margin-top: 10px; padding-left: 46px; }

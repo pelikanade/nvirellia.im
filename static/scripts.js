@@ -38,6 +38,7 @@
     return {
       T, hourTot, dayTot, last,
       H0: parseInt(T.hourly.start.slice(11, 13), 10),
+      nowAt: (Date.parse(d.generatedAt) - Date.parse(T.hourly.start)) / 36e5,   // hours past local midnight at snapshot
     };
   }
   const hourLabel = i => String((m.H0 + i) % 24).padStart(2, '0') + ':00';
@@ -94,7 +95,7 @@
   function series() {
     const { T, last } = m;
     if (range === 'today') return { inp: T.hourly.input, out: T.hourly.output, label: hourLabel, step: 3,
-      cap: 'tokens by hour, today' };
+      cap: 'tokens by hour, today', now: m.nowAt };
     const a = Math.max(0, last - 6);
     return { inp: T.daily.input.slice(a, last + 1), out: T.daily.output.slice(a, last + 1), step: 1,
       label: i => dayLabel(dayAt(a + i)), cap: 'tokens per day, last 7 days' };
@@ -129,6 +130,11 @@
       el('polyline', { points: pts, class: 'l-' + k }, svg, 1);
       el('circle', { cx: x(n - 1), cy: y(arr[n - 1]), r: 3, class: 'd-' + k }, svg, 1);
     });
+    if (s.now >= 0 && s.now <= n - 1) {                             // today: the snapshot's place in the day
+      const nx = x(s.now), end = s.now > (n - 1) / 2;
+      el('line', { x1: nx, x2: nx, y1: TOP, y2: TOP + ph, class: 'g-now' }, svg, 1);
+      el('text', { x: end ? nx - 4 : nx + 4, y: TOP + 11, 'text-anchor': end ? 'end' : 'start', class: 'g-ax', text: 'now' }, svg, 1);
+    }
     for (let i = 0; i < n; i++) {                                    // hover strips with native tooltips
       const w = pw / (n - 1);
       const hit = el('rect', { x: Math.max(L, x(i) - w / 2), y: TOP, width: w / (i && i < n - 1 ? 1 : 2), height: ph, class: 'g-hit' }, svg, 1);
