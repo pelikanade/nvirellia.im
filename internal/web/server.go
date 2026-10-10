@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/pelikanade/nvirellia.im/internal/dev"
 	"github.com/pelikanade/nvirellia.im/internal/feed"
 )
 
@@ -19,39 +20,81 @@ type Feeds interface {
 }
 
 type server struct {
-	feeds Feeds
-	pages *template.Template
+	feeds  Feeds
+	pages  *template.Template // production: parsed once at startup
+	assets fs.FS
+	hub    *dev.Hub // non-nil in dev: templates parsed per request
 }
 
-// NewHandler routes the site. assets must contain templates/ and static/.
+// NewHandler routes the site from assets, which must contain templates/ and static/.
 func NewHandler(feeds Feeds, assets fs.FS) (http.Handler, error) {
-	pages, err := template.New("").ParseFS(assets, "templates/*.html")
-	if err != nil {
-		return nil, err
+	return buildHandler(feeds, assets, nil)
+}
+
+// NewDevHandler serves assets from disk for development. Templates are parsed on
+// every request, static files are never cached, and /dev/events streams reload
+// signals from hub to open pages.
+func NewDevHandler(feeds Feeds, assets fs.FS, hub *dev.Hub) (http.Handler, error) {
+	return buildHandler(feeds, assets, hub)
+}
+
+func buildHandler(feeds Feeds, assets fs.FS, hub *dev.Hub) (http.Handler, error) {
+	s := &server{feeds: feeds, assets: assets, hub: hub}
+	if hub == nil {
+		pages, err := parseTemplates(assets)
+		if err != nil {
+			return nil, err
+		}
+		s.pages = pages
 	}
 	static, err := fs.Sub(assets, "static")
 	if err != nil {
 		return nil, err
 	}
 
-	s := &server{feeds: feeds, pages: pages}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.index)
 	mux.HandleFunc("GET /api/stats.json", s.stats)
 	mux.HandleFunc("GET /healthz", healthz)
-	mux.Handle("GET /static/", http.StripPrefix("/static/", longCache(http.FileServerFS(static))))
+	if hub != nil {
+		mux.Handle("GET /dev/events", hub)
+		mux.Handle("GET /static/", http.StripPrefix("/static/", noStore(http.FileServerFS(static))))
+	} else {
+		mux.Handle("GET /static/", http.StripPrefix("/static/", longCache(http.FileServerFS(static))))
+	}
 	return mux, nil
 }
 
+func parseTemplates(assets fs.FS) (*template.Template, error) {
+	return template.New("").ParseFS(assets, "templates/*.html")
+}
+
+func noStore(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		h.ServeHTTP(w, r)
+	})
+}
+
 func (s *server) index(w http.ResponseWriter, _ *http.Request) {
+	pages := s.pages
+	if s.hub != nil {
+		var err error
+		if pages, err = parseTemplates(s.assets); err != nil {
+			log.Printf("web: parse templates: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+	}
 	p, err := newPage(s.feeds.Feed())
 	if err != nil {
 		log.Printf("web: build page: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	p.Dev = s.hub != nil
 	var buf bytes.Buffer
-	if err := s.pages.ExecuteTemplate(&buf, "layout.html", p); err != nil {
+	if err := pages.ExecuteTemplate(&buf, "layout.html", p); err != nil {
 		log.Printf("web: render page: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return

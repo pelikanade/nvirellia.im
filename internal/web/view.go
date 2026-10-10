@@ -15,6 +15,7 @@ import (
 // page is the template data for the sheet. Field names are used by templates/*.html.
 type page struct {
 	Live     bool
+	Dev      bool
 	FeedJSON template.JS
 	Updated  string
 	Readouts readouts

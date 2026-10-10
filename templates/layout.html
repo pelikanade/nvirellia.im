@@ -76,5 +76,12 @@
 
 <script type="application/json" id="cl-stats">{{.FeedJSON}}</script>
 <script src="/static/monitor.js" defer></script>
+{{if .Dev}}<script>
+(function () {
+  var es = new EventSource("/dev/events"), opened = false;
+  es.onopen = function () { if (opened) location.reload(); opened = true; };
+  es.onmessage = function () { location.reload(); };
+})();
+</script>{{end}}
 </body>
 </html>
