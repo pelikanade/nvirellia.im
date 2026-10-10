@@ -3,7 +3,8 @@
    sheet; Resources still renders server-side and is reached via #resources (:target).
 
    Data: the feed embedded in <script id="cl-stats"> (same JSON as /api/stats.json).
-   It is refreshed from /api/stats.json every 60 s while the tab is visible.
+Readouts, legend values, and the footer total are rendered by the server and swapped in by id every 60 s from /fragments/readouts.
+   The graph, heatmap, and sparkline are redrawn from /api/stats.json every 60 s while the tab is visible.
 
    URL hash: #profile | #resources picks a tab (plain links work too);
    range=7d starts the history graph on the 7-day range. */
@@ -22,26 +23,24 @@
   // 4477200 -> "4.5M", 182300 -> "182k", 4710 -> "4.7k"
   const fmt = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e4 ? Math.round(n / 1e3) + 'k'
     : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n);
-  const sum = a => a.reduce((s, v) => s + (v || 0), 0);
   const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const TABS = ['profile', 'resources'];
+  const TABS = ['profile', 'resources'].filter(n => document.getElementById(n));   // the resources panel exists only when magpie has data
   const REFRESH_MS = 60 * 1000;
 
   let data = JSON.parse($('#cl-stats').textContent);
   let m = null;                       // derived view of `data`, rebuilt on every refresh
-  let range = '24h';
+  let range = 'today';
 
   function derive(d) {
     const T = d.tokens;
+    if (!T) return null;                                            // magpie has no data: no Resources panel
     const hourTot = T.hourly.input.map((v, i) => v + T.hourly.output[i]);
     const dayTot = T.daily.input.map((v, i) => v == null ? null : v + T.daily.output[i]);
     let last = dayTot.length - 1; while (last > 0 && dayTot[last] == null) last--;   // index of "today"
     return {
-      T, live: !d.sample, hourTot, dayTot, last,
+      T, hourTot, dayTot, last,
       H0: parseInt(T.hourly.start.slice(11, 13), 10),
-      todayTot: T.today.input + T.today.output,
-      snap: `${d.generatedAt.slice(0, 16).replace('T', ' ')} (UTC+8)`,
     };
   }
   const hourLabel = i => String((m.H0 + i) % 24).padStart(2, '0') + ':00';
@@ -50,19 +49,7 @@
   const dayLabel = d => `${WD[d.getUTCDay()]} ${String(d.getUTCDate()).padStart(2, '0')}`;
   const iso = d => d.toISOString().slice(0, 10);
 
-  /* ---------- badges, status line, toolbar sparkline ---------- */
-  function renderBadges() {
-    const live = m.live;
-    document.documentElement.classList.toggle('is-live', live);
-    const sp = $('.spark');
-    sp.title = live ? 'tokens per hour, last 24h (via magpie) — open Resources'
-      : 'tokens per hour, last 24h (sample data) — open Resources';
-    sp.setAttribute('aria-label', live ? 'token use, last 24 hours: open Resources'
-      : 'token use, last 24 hours, sample data: open Resources');
-    $('.sb-mon').title = live ? 'tokens from magpie' : 'sample data: fake numbers, not a live feed';
-  }
   function renderStatus() {
-    set('sb-today', fmt(m.todayTot));
     const svg = $('#spark'), W = 72, H = 24, mx = Math.max(1, ...m.hourTot);
     svg.textContent = '';
     const pts = m.hourTot.map((v, i) => `${(i * W / (m.hourTot.length - 1)).toFixed(1)},${(H - 1 - v / mx * (H - 4)).toFixed(1)}`).join(' ');
@@ -109,16 +96,18 @@
   const niceStep = v => { const p = 10 ** Math.floor(Math.log10(v)); return p * [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find(k => k * p >= v); };
   function series() {
     const { T, last } = m;
-    if (range === '24h') return { inp: T.hourly.input, out: T.hourly.output, label: hourLabel, step: 3,
-      cap: 'tokens per hour, last 24 hours' };
+    if (range === 'today') return { inp: T.hourly.input, out: T.hourly.output, label: hourLabel, step: 3,
+      cap: 'tokens by hour, today' };
     const a = Math.max(0, last - 6);
     return { inp: T.daily.input.slice(a, last + 1), out: T.daily.output.slice(a, last + 1), step: 1,
       label: i => dayLabel(dayAt(a + i)), cap: 'tokens per day, last 7 days' };
   }
   function drawGraph() {
-    const svg = $('#graph'), W = svg.clientWidth, H = svg.clientHeight;
-    if (!W || !m) return;                                           // panel hidden
-    const s = series(), n = s.inp.length, SMP = m.live ? '' : ' (sample)', SMPD = m.live ? '' : ', sample data';
+    const svg = $('#graph');
+    if (!svg || !m) return;                                         // no panel: magpie has no data
+    const W = svg.clientWidth, H = svg.clientHeight;
+    if (!W) return;                                                 // panel hidden
+    const s = series(), n = s.inp.length;
     const L = 46, R = 12, TOP = 8, B = 22, pw = W - L - R, ph = H - TOP - B;
     const step = niceStep(Math.max(1, ...s.inp, ...s.out) / 4), max = step * 4;
     const x = i => L + i * pw / (n - 1), y = v => TOP + ph - v / max * ph;
@@ -146,10 +135,10 @@
     for (let i = 0; i < n; i++) {                                    // hover strips with native tooltips
       const w = pw / (n - 1);
       const hit = el('rect', { x: Math.max(L, x(i) - w / 2), y: TOP, width: w / (i && i < n - 1 ? 1 : 2), height: ph, class: 'g-hit' }, svg, 1);
-      el('title', { text: `${s.label(i)}: input ${fmt(s.inp[i])}, output ${fmt(s.out[i])} tokens${SMP}` }, hit, 1);
+      el('title', { text: `${s.label(i)}: input ${fmt(s.inp[i])}, output ${fmt(s.out[i])} tokens` }, hit, 1);
     }
     set('graph-cap', s.cap);
-    svg.setAttribute('aria-label', `${s.cap}${SMPD}. input peaks at ${fmt(Math.max(...s.inp))}, output at ${fmt(Math.max(...s.out))}.`);
+    svg.setAttribute('aria-label', `${s.cap}. input peaks at ${fmt(Math.max(...s.inp))}, output at ${fmt(Math.max(...s.out))}.`);
   }
   $$('[data-range]').forEach(b => b.addEventListener('click', () => {
     range = b.dataset.range;
@@ -158,18 +147,6 @@
   }));
   let resizeTimer;
   window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(drawGraph, 120); });
-
-  /* ---------- Resources: readouts + legend values ---------- */
-  function renderReadouts() {
-    const { T, hourTot, dayTot, last, todayTot, snap, live } = m;
-    const nowH = hourTot.length - 1, peak = hourTot.indexOf(Math.max(...hourTot));
-    set('lg-in', `today ${fmt(T.today.input)} · this hour ${fmt(T.hourly.input[nowH])}`);
-    set('lg-out', `today ${fmt(T.today.output)} · this hour ${fmt(T.hourly.output[nowH])}`);
-    set('r-today', fmt(todayTot)); set('r-in', fmt(T.today.input)); set('r-out', fmt(T.today.output));
-    set('r-hour', fmt(hourTot[nowH])); set('r-peak', `${hourLabel(peak)} · ${fmt(hourTot[peak])}`);
-    set('r-7d', fmt(sum(dayTot.slice(Math.max(0, last - 6), last + 1))));
-    set('ro-note', `${live ? 'magpie' : 'sample'} snapshot ${snap}; "this hour" is still filling.`);
-  }
 
   /* ---------- Resources: 16-week heatmap (columns = weeks, Mon..Sun) ---------- */
   function renderHeat() {
@@ -188,29 +165,41 @@
       el('span', { class: 'hc ' + lvl, title: label, 'data-label': label }, heat);
     });
     const best = dayTot.indexOf(hmax);
-    heat.setAttribute('aria-label', `token activity per day for 16 weeks${m.live ? '' : ', sample data'}. busiest day ${iso(dayAt(best))} with ${fmt(hmax)} tokens; today ${fmt(dayTot[m.last])}.`);
+    heat.setAttribute('aria-label', `token activity per day for 16 weeks. busiest day ${iso(dayAt(best))} with ${fmt(hmax)} tokens; today ${fmt(dayTot[m.last])}.`);
   }
-  $('#heat').addEventListener('mouseover', e => { if (e.target.dataset.label) set('heat-read', e.target.dataset.label); });
+  $('#heat')?.addEventListener('mouseover', e => { if (e.target.dataset.label) set('heat-read', e.target.dataset.label); });
 
   /* ---------- render everything from the current feed ---------- */
   function render() {
     m = derive(data);
-    renderBadges(); renderStatus(); renderReadouts(); renderHeat(); renderGraph();
+    if (!m || !$('#resources')) return;                             // magpie has no data: no panel to draw
+    renderStatus(); renderHeat(); renderGraph();
   }
   function renderGraph() { drawGraph(); }
 
-  /* ---------- live refresh ---------- */
-  async function refresh() {
-    if (document.visibilityState !== 'visible') return;
-    try {
-      const res = await fetch('/api/stats.json', { cache: 'no-store', headers: { accept: 'application/json' } });
-      if (!res.ok) return;
-      data = await res.json();
-      render();
-    } catch (e) {
-      // offline or a blip: keep the last snapshot on screen
-    }
+/* ---------- live refresh: feed drives graph + heatmap; fragment drives readouts ---------- */
+async function refresh() {
+  if (document.visibilityState !== 'visible') return;
+  // either side failing (offline, a blip) keeps its last values on screen
+  await Promise.allSettled([refreshFeed(), refreshReadouts()]);
+}
+async function refreshFeed() {
+  const res = await fetch('/api/stats.json', { cache: 'no-store', headers: { accept: 'application/json' } });
+  if (!res.ok) return;
+  data = await res.json();
+  render();
+}
+async function refreshReadouts() {
+  const res = await fetch('/fragments/readouts', { cache: 'no-store' });
+  if (!res.ok) return;
+  const fresh = document.createElement('template');
+  fresh.innerHTML = await res.text();
+  // each server-rendered readout carries its id; replace the matching element in place
+  for (const el of Array.from(fresh.content.children)) {
+    const cur = document.getElementById(el.id);
+    if (cur) cur.replaceWith(el);
   }
+}
 
   /* ---------- window controls: minimise / maximise / close ---------- */
   const win = $('.window'), dlg = $('#quit-dlg'), info = $('#infobar');
@@ -234,6 +223,6 @@
   /* ---------- start: hash picks tab and range ---------- */
   render();
   const o = applyHash();
-  if (o.range === '7d') $('[data-range="7d"]').click();
+  if (o.range === '7d') $('[data-range="7d"]')?.click();
   setInterval(refresh, REFRESH_MS);
 })();

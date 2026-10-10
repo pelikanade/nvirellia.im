@@ -35,9 +35,8 @@
   --rail: 288px;
 }
 * { box-sizing: border-box; }
-html { background: #d6d9de; }
 body {
-  display: flow-root;   /* contain the .window margins: no collapse through body (gap + extra scroll) */
+  display: flow-root;   /* the top gap is the window's margin, painted by body's background; no bottom margin, so it adds no scroll */
   margin: 0; font: var(--cl-size)/1.5 var(--cl-font); color: var(--cl-text);
   /* pale desktop: very soft blue-grey, like an untouched GNOME 2 backdrop */
   background: linear-gradient(to bottom, #e3e6ea, #d2d6dc) fixed;
@@ -62,7 +61,7 @@ code, .mono { font-family: var(--cl-mono); font-size: 12px; }
 
 /* ---------- window ---------- */
 .window {
-  position: relative; max-width: 1240px; margin: 24px auto; background: var(--cl-bg);
+  position: relative; max-width: 1240px; margin: 24px auto 0; background: var(--cl-bg);
   border: 1px solid #5f5c58; border-radius: 5px 5px 2px 2px; overflow: hidden;
   box-shadow: 0 2px 4px rgba(0,0,0,.12), 0 10px 28px rgba(30,40,60,.18);
 }
@@ -301,6 +300,7 @@ code, .mono { font-family: var(--cl-mono); font-size: 12px; }
 .ntab[aria-selected="true"], .ntab.static { height: 31px; background: var(--cl-base); border-bottom-color: var(--cl-base);
   box-shadow: inset 0 2px 0 #7aa3d8, inset 0 3px 0 #fff; z-index: 1; cursor: default; }
 .ntab:focus-visible { outline: 2px solid var(--cl-focus); outline-offset: -5px; border-radius: 3px 3px 0 0; }
+.ntab:disabled, .ntab[aria-disabled="true"] { color: var(--cl-dim); cursor: default; background: linear-gradient(to bottom, #e9e7e5, #d8d6d3); }
 .nojs-note { align-self: center; padding-top: 0; font-size: var(--cl-size-sm); color: var(--cl-muted); }
 
 /* monitor pages */
@@ -308,10 +308,7 @@ code, .mono { font-family: var(--cl-mono); font-size: 12px; }
 .mon-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-bottom: 12px; }
 .mon-head h2 { font-size: 14px; }
 .mon-head .aside { color: var(--cl-muted); font-size: var(--cl-size-sm); }
-.badge-sample { display: inline-block; font-size: var(--cl-size-xs); letter-spacing: .06em; line-height: 1.6; padding: 0 6px; cursor: help;
-  color: #6b4400; background: #fdf3d0; border: 1px solid #dcc06a; border-radius: 2px; }
 .mon .frame { background: var(--cl-base); }
-.is-live .badge-sample { display: none; }
 .mon .frame + .frame, .mon .mon-row { margin-top: 20px; }
 .mon-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 18px; align-items: start; }
 .mon-row .frame { margin-top: 0 !important; height: 100%; }
