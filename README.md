@@ -23,12 +23,14 @@ embedded copies and sends no reload script.
 | Variable | Default | Purpose |
 |---|---|---|
 | `LISTEN_ADDR` | `:8080` | listen address |
-| `MAGPIE_URL` | unset | magpie token-usage endpoint (unset → sample data) |
-| `MAGPIE_TOKEN` | unset | bearer token for magpie; sent only from the server |
+| `MAGPIE_URL` | unset | magpie web base URL, e.g. `http://<host>:3430` (unset → no Resources panel) |
+| `MAGPIE_WEB_KEY` | unset | magpie web key, required with `MAGPIE_URL` |
 | `FEED_TTL` | `30s` | in-memory cache lifetime for upstream fetches |
 
+Variables are read from the environment. A `.env` file in the working directory fills in
+any that are not already set (git-ignored; keep the key there, not in the repo).
 Magpie falls back when unreachable: the last good value is served if under 10 minutes
-old; otherwise the sample blob is served with `"sample": true`.
+old; otherwise no tokens are served and the Resources panel is hidden.
 
 ## Routes
 
@@ -39,10 +41,13 @@ old; otherwise the sample blob is served with `"sample": true`.
 
 ## Test
 
+Tests are end-to-end only. `e2e/` builds the binary, runs it against a stub magpie, and
+checks the HTTP responses. There are no unit tests.
+
     go vet ./...
-    go test ./...
+    go test ./e2e/
 
 ## Upstream items to confirm with Noa
 
-- magpie: endpoint path, response shape, auth scheme (currently assumed; see `internal/feed/magpie.go`)
+- magpie: web API (`/api/usage`, login with the web key) is assumed, not yet checked against a live magpie; confirm the endpoint and response shape before relying on live numbers
 - Hosting target and domain wiring
