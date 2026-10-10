@@ -83,7 +83,7 @@ func newPage(f feed.Feed) (page, error) {
 		ThisHour: fmtTokens(hourTot[nowH]),
 		Peak:     fmt.Sprintf("%s · %s", hourLabel(hourStart, peak), fmtTokens(hourTot[peak])),
 		Last7d:   fmtTokens(last7),
-		Note:     fmt.Sprintf("magpie snapshot %s; \"this hour\" is still filling.", snapshotLabel),
+		Note:     fmt.Sprintf("magpie snapshot: %s", snapshotLabel),
 	}
 	p.Legend = legend{
 		In:  fmt.Sprintf("today %s · this hour %s", fmtTokens(t.Today.Input), fmtTokens(t.Hourly.Input[nowH])),
