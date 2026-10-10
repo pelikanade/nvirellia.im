@@ -132,7 +132,7 @@ func siteEnv() []string {
 	var env []string
 	for _, kv := range os.Environ() {
 		k, _, _ := strings.Cut(kv, "=")
-		if strings.HasPrefix(k, "MAGPIE_") || k == "LISTEN_ADDR" || k == "FEED_TTL" || k == "NVIRELLIA_DEV_ROOT" {
+		if strings.HasPrefix(k, "MAGPIE_") || k == "LISTEN_ADDR" || k == "FEED_TTL" {
 			continue
 		}
 		env = append(env, kv)
@@ -227,25 +227,19 @@ type statsResp struct {
 
 func fetchStats(t *testing.T, base string) statsResp {
 	t.Helper()
-	code, body := get(t, base+"/api/stats.json")
+	code, page := get(t, base+"/")
 	if code != http.StatusOK {
-		t.Fatalf("/api/stats.json status = %d", code)
+		t.Fatalf("/ status = %d", code)
+	}
+	m := regexp.MustCompile(`(?s)<script type="application/json" id="cl-stats">(.*?)</script>`).FindStringSubmatch(page)
+	if m == nil {
+		t.Fatal("page has no #cl-stats feed")
 	}
 	var s statsResp
-	if err := json.Unmarshal([]byte(body), &s); err != nil {
-		t.Fatalf("/api/stats.json is not valid JSON: %v\n%s", err, body)
+	if err := json.Unmarshal([]byte(m[1]), &s); err != nil {
+		t.Fatalf("#cl-stats is not valid JSON: %v\n%s", err, m[1])
 	}
 	return s
-}
-
-// elementText returns the text directly inside the element with the given id.
-func elementText(t *testing.T, body, id string) string {
-	t.Helper()
-	m := regexp.MustCompile(`id="` + regexp.QuoteMeta(id) + `"[^>]*>([^<]*)<`).FindStringSubmatch(body)
-	if m == nil {
-		t.Fatalf("no element with id %q", id)
-	}
-	return m[1]
 }
 
 // localMidnight is 00:00 today in UTC+8, the zone the feed reports in.
@@ -266,7 +260,7 @@ func TestWithoutMagpieServesProfileOnly(t *testing.T) {
 			t.Errorf("page missing %q", want)
 		}
 	}
-	for _, banned := range []string{`id="resources"`, `href="#resources"`, "sample data"} {
+	for _, banned := range []string{`id="resources"`, `href="#resources"`} {
 		if strings.Contains(page, banned) {
 			t.Errorf("page without magpie contains %q", banned)
 		}
@@ -311,11 +305,6 @@ func TestMagpieServesTokensAndResources(t *testing.T) {
 		if !strings.Contains(page, want) {
 			t.Errorf("page missing %q", want)
 		}
-	}
-	_, frag := get(t, base+"/fragments/readouts")
-	// r-today is the day's total: input 300 + output 30.
-	if got := elementText(t, frag, "r-today"); got != "330" {
-		t.Errorf("r-today = %q, want 330", got)
 	}
 }
 

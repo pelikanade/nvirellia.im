@@ -20,7 +20,7 @@ func Location() (*time.Location, error) {
 	return time.LoadLocation(zoneName)
 }
 
-// Feed is the body of GET /api/stats.json.
+// Feed is the nvirellia.im profile feed: generation time, day zone, and token windows.
 type Feed struct {
 	GeneratedAt string  `json:"generatedAt"`
 	TZ          string  `json:"tz"`

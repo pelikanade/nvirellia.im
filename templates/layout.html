@@ -1,9 +1,8 @@
 <!doctype html>
 <!--
   Noa Virellia — profile sheet, Clearlooks / GNOME 2. Served by the Go program.
-  Markup ported from Design/prototypes/profile-sheet-clearlooks.html (v2.1).
   Without JS: the Profile sheet plus, when magpie has data, the Resources panel, reached by the
-  #resources anchor via :target. With JS: notebook tabs, graph, heatmap, live refresh.
+  #resources anchor via :target. With JS: notebook tabs, graph, heatmap.
 -->
 <html lang="en" class="no-js">
 <head>
@@ -20,24 +19,24 @@
 
 <div class="window">
   <header class="titlebar" aria-label="Window title">
-    <svg class="ic" aria-hidden="true"><use href="#i-app"/></svg>
+    {{icon "i-app"}}
     <span class="t">Noa Virellia — Profile</span>
     <span class="wm"><button type="button" class="min" aria-label="Minimise" title="Minimise" disabled></button><button type="button" class="max" aria-label="Maximise" title="Maximise" aria-pressed="false" disabled></button><button type="button" class="cls" aria-label="Close" title="Close" disabled></button></span>
   </header>
 
   <nav class="toolbar" aria-label="Elsewhere">
-    <a class="tb" href="https://nvirellia.im"><svg class="ic" aria-hidden="true"><use href="#i-back"/></svg><span>nvirellia.im</span></a>
-    <a class="tb" href="https://pelikanade.nekoweb.org/"><svg class="ic" aria-hidden="true"><use href="#i-fwd"/></svg><span>Nekoweb porch</span></a>
+    <a class="tb" href="https://nvirellia.im">{{icon "i-back"}}<span>nvirellia.im</span></a>
+    <a class="tb" href="https://pelikanade.nekoweb.org/">{{icon "i-fwd"}}<span>Nekoweb porch</span></a>
     <span class="tb-sep" aria-hidden="true"></span>
-    <a class="tb" href="https://github.com/pelikanade"><svg class="ic" aria-hidden="true"><use href="#i-repo"/></svg><span class="lbl-opt">GitHub</span></a>
-    <a class="tb" href="https://t.me/noa_virellia"><svg class="ic" aria-hidden="true"><use href="#i-plane"/></svg><span class="lbl-opt">Telegram</span></a>
+    <a class="tb" href="https://github.com/pelikanade">{{icon "i-repo"}}<span class="lbl-opt">GitHub</span></a>
+    <a class="tb" href="https://t.me/noa_virellia">{{icon "i-plane"}}<span class="lbl-opt">Telegram</span></a>
     <span class="tb-spring"></span>
     <span class="tb-note">she/they · UTC+8</span>
     {{if .Resources}}<a class="spark js-only" href="#resources" title="tokens by hour, today — open Resources" aria-label="token use, today by hour: open Resources"><svg id="spark" viewBox="0 0 72 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"></svg></a>{{end}}
   </nav>
 
   <div class="infobar" id="infobar" role="alert" hidden>
-    <svg class="ic" aria-hidden="true"><use href="#i-info"/></svg>
+    {{icon "i-info"}}
     <p><b>this is a webpage, you're staying.</b> the window manager was decorative all along.</p>
     <button type="button" class="btn" id="info-ok">OK</button>
   </div>
@@ -45,12 +44,12 @@
   <main class="notebook" id="main" tabindex="-1">
   <div class="notebook-tabs">
     <div role="tablist" aria-label="Profile window" class="js-only">
-      <button type="button" role="tab" class="ntab" id="tab-profile" aria-controls="profile" aria-selected="true"><svg class="ic" aria-hidden="true"><use href="#i-person"/></svg>Profile</button>
-      <button type="button" role="tab" class="ntab" id="tab-resources" aria-controls="resources" aria-selected="false" tabindex="-1"{{if not .Resources}} disabled{{end}}><svg class="ic" aria-hidden="true"><use href="#i-chart"/></svg>Resources</button>
+      <button type="button" role="tab" class="ntab" id="tab-profile" aria-controls="profile" aria-selected="true">{{icon "i-person"}}Profile</button>
+      <button type="button" role="tab" class="ntab" id="tab-resources" aria-controls="resources" aria-selected="false" tabindex="-1"{{if not .Resources}} disabled{{end}}>{{icon "i-chart"}}Resources</button>
     </div>
     <nav class="nojs-only nojs-tabs" aria-label="Sections">
-      <a class="ntab" href="#profile" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-person"/></svg>Profile</a>
-      {{if .Resources}}<a class="ntab" href="#resources"><svg class="ic" aria-hidden="true"><use href="#i-chart"/></svg>Resources</a>{{else}}<span class="ntab" aria-disabled="true"><svg class="ic" aria-hidden="true"><use href="#i-chart"/></svg>Resources</span>{{end}}
+      <a class="ntab" href="#profile" aria-current="page">{{icon "i-person"}}Profile</a>
+      {{if .Resources}}<a class="ntab" href="#resources">{{icon "i-chart"}}Resources</a>{{else}}<span class="ntab" aria-disabled="true">{{icon "i-chart"}}Resources</span>{{end}}
     </nav>
   </div>
 
@@ -59,8 +58,8 @@
   </main>
 
   <footer class="statusbar">
-{{if .Resources}}<span class="grow sb-mon js-only" title="tokens from magpie"><svg class="ic" aria-hidden="true"><use href="#i-chart"/></svg><span class="sb-txt">tokens today: {{template "sb-today" .Readouts.Today}}</span></span>{{end}}
-    <span class="grow sb-upd"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg>Updated {{.Updated}}</span>
+{{if .Resources}}<span class="grow sb-mon js-only" title="tokens from magpie">{{icon "i-chart"}}<span class="sb-txt">tokens today: {{template "sb-today" .Readouts.Today}}</span></span>{{end}}
+    <span class="grow sb-upd">{{icon "i-clock"}}Updated {{.Updated}}</span>
     <span class="sb-who">pelikanade</span>
     <span class="grip" aria-hidden="true"></span>
   </footer>
@@ -68,20 +67,13 @@
 
 <div class="desk-note" id="desk-note" role="status" hidden>the profile window is minimised. restore it from the panel below.</div>
 <div class="gpanel" id="gpanel" hidden>
-  <button type="button" class="taskchip" id="taskchip" title="Restore window"><svg class="ic" aria-hidden="true"><use href="#i-app"/></svg>Noa Virellia — Profile</button>
+  <button type="button" class="taskchip" id="taskchip" title="Restore window">{{icon "i-app"}}Noa Virellia — Profile</button>
   <span class="ws" aria-hidden="true"><span></span><span></span></span>
 </div>
 
 {{template "quit-dialog" .}}
 
 <script type="application/json" id="cl-stats">{{.FeedJSON}}</script>
-<script src="/static/monitor.js" defer></script>
-{{if .Dev}}<script>
-(function () {
-  var es = new EventSource("/dev/events"), opened = false;
-  es.onopen = function () { if (opened) location.reload(); opened = true; };
-  es.onmessage = function () { location.reload(); };
-})();
-</script>{{end}}
+<script src="/static/scripts.js" defer></script>
 </body>
 </html>

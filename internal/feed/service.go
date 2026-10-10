@@ -10,51 +10,40 @@ type TokenSource interface {
 	Usage(ctx context.Context) (Usage, error)
 }
 
-// Config holds the feed's timing. Zero values take the defaults noted below.
+// Config holds the feed's day zone and how long a fetched value stays fresh.
 type Config struct {
-	Location *time.Location // default: UTC+8
+	Location *time.Location // day zone for the feed; required
 	TTL      time.Duration  // how long a fetched value is fresh (FEED_TTL); required
-	Timeout  time.Duration  // per-upstream request timeout; default 3s
-	MaxStale time.Duration  // oldest last-good value served on error; default 10m
-	Now      func() time.Time
 }
+
+const (
+	upstreamTimeout = 3 * time.Second  // per-upstream request timeout
+	maxStale        = 10 * time.Minute // oldest last-good value served on error
+)
 
 // Service builds Feed snapshots. It is safe for concurrent use.
 type Service struct {
 	loc    *time.Location
-	now    func() time.Time
 	tokens *cached[Usage]
 }
 
-// New wires the service. A nil source means magpie is unconfigured, so Tokens is nil.
+// New wires the service. cfg.Location must be set. A nil source means magpie is unconfigured, so Tokens is nil.
 func New(cfg Config, tokens TokenSource) *Service {
-	if cfg.Location == nil {
-		cfg.Location = time.UTC
-	}
-	if cfg.Timeout == 0 {
-		cfg.Timeout = 3 * time.Second
-	}
-	if cfg.MaxStale == 0 {
-		cfg.MaxStale = 10 * time.Minute
-	}
-	if cfg.Now == nil {
-		cfg.Now = time.Now
-	}
-	s := &Service{loc: cfg.Location, now: cfg.Now}
+	s := &Service{loc: cfg.Location}
 
 	var fetchTokens func(context.Context) (Usage, error)
 	if tokens != nil {
 		fetchTokens = tokens.Usage
 	}
-	s.tokens = &cached[Usage]{name: "magpie", fetch: fetchTokens, now: cfg.Now,
-		ttl: cfg.TTL, timeout: cfg.Timeout, maxStale: cfg.MaxStale}
+	s.tokens = &cached[Usage]{name: "magpie", fetch: fetchTokens, now: time.Now,
+		ttl: cfg.TTL, timeout: upstreamTimeout, maxStale: maxStale}
 	return s
 }
 
 // Feed returns the current snapshot. Tokens is nil while magpie is unconfigured,
-// unreachable with no last-good value within MaxStale, or has returned no buckets.
+// unreachable with no last-good value within maxStale, or has returned no buckets.
 func (s *Service) Feed() Feed {
-	now := s.now()
+	now := time.Now()
 	f := Feed{
 		GeneratedAt: now.In(s.loc).Format(time.RFC3339),
 		TZ:          s.loc.String(),

@@ -13,7 +13,6 @@ import (
 	"time"
 
 	site "github.com/pelikanade/nvirellia.im"
-	"github.com/pelikanade/nvirellia.im/internal/dev"
 	"github.com/pelikanade/nvirellia.im/internal/feed"
 	"github.com/pelikanade/nvirellia.im/internal/web"
 )
@@ -55,12 +54,7 @@ func main() {
 	if err := loadDotEnv(".env"); err != nil {
 		log.Fatal(err)
 	}
-	var err error
-	if len(os.Args) > 1 && os.Args[1] == "dev" {
-		err = runDev()
-	} else {
-		err = run()
-	}
+	err := run()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -89,7 +83,7 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	handler, err := siteHandler(ctx, svc)
+	handler, err := web.NewHandler(svc, site.Assets)
 	if err != nil {
 		return err
 	}
@@ -118,20 +112,4 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return srv.Shutdown(shutdownCtx)
-}
-
-// devRootEnv names the checkout a dev-mode server serves from. `nvirellia dev` sets it.
-const devRootEnv = "NVIRELLIA_DEV_ROOT"
-
-// siteHandler serves the embedded assets. With devRootEnv set it serves the checkout
-// on disk and reloads open pages when templates or static files change.
-func siteHandler(ctx context.Context, feeds web.Feeds) (http.Handler, error) {
-	root := os.Getenv(devRootEnv)
-	if root == "" {
-		return web.NewHandler(feeds, site.Assets)
-	}
-	hub := dev.NewHub()
-	go dev.Watch(ctx, 300*time.Millisecond, root, []string{"templates", "static"}, func(string) bool { return true }, hub.Notify)
-	log.Printf("dev mode: serving %s with live reload", root)
-	return web.NewDevHandler(feeds, os.DirFS(root), hub)
 }

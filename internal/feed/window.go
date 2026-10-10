@@ -9,52 +9,58 @@ import "time"
 func aggregate(u Usage, now time.Time, loc *time.Location) Tokens {
 	local := now.In(loc)
 	y, m, d := local.Date()
-
-	hourly := make(map[string]Pair)
-	for _, b := range u.Hours {
-		k := b.Start.In(loc).Format(hourLayout)
-		hp := hourly[k]
-		hp.Input += b.Input
-		hp.Output += b.Output
-		hourly[k] = hp
-	}
-	daily := make(map[string]Pair)
-	for _, b := range u.Days {
-		k := b.Start.In(loc).Format(dayLayout)
-		dp := daily[k]
-		dp.Input += b.Input
-		dp.Output += b.Output
-		daily[k] = dp
-	}
+	todayMidnight := time.Date(y, m, d, 0, 0, 0, 0, loc)
+	hourly := sumByKey(u.Hours, loc, hourLayout)
+	daily := sumByKey(u.Days, loc, dayLayout)
+	start := dailyStart(local)
 
 	t := Tokens{
 		Today: daily[local.Format(dayLayout)],
 		Hourly: Hourly{
-			Start:  time.Date(y, m, d, 0, 0, 0, 0, loc).Format(time.RFC3339),
-			Input:  make([]int64, hourlyWindow),
-			Output: make([]int64, hourlyWindow),
+			Start: todayMidnight.Format(time.RFC3339),
+		},
+		Daily: Daily{
+			Start: start.Format(dayLayout),
 		},
 	}
-	for i := range hourlyWindow {
-		p := hourly[time.Date(y, m, d, i, 0, 0, 0, loc).Format(hourLayout)]
-		t.Hourly.Input[i] = p.Input
-		t.Hourly.Output[i] = p.Output
-	}
-
-	start := dailyStart(local)
-	todayMidnight := time.Date(y, m, d, 0, 0, 0, 0, loc)
-	t.Daily.Start = start.Format(dayLayout)
-	for i := range dailyDays {
+	t.Hourly.Input, t.Hourly.Output = fillSeries(hourlyWindow, func(i int) (Pair, bool) {
+		return hourly[time.Date(y, m, d, i, 0, 0, 0, loc).Format(hourLayout)], true
+	}, func(v int64) int64 { return v })
+	t.Daily.Input, t.Daily.Output = fillSeries(dailyDays, func(i int) (Pair, bool) {
 		day := time.Date(start.Year(), start.Month(), start.Day()+i, 0, 0, 0, 0, loc)
 		if day.After(todayMidnight) {
-			t.Daily.Input = append(t.Daily.Input, nil)
-			t.Daily.Output = append(t.Daily.Output, nil)
+			return Pair{}, false
+		}
+		return daily[day.Format(dayLayout)], true
+	}, func(v int64) *int64 { return &v })
+	return t
+}
+
+// sumByKey totals each bucket's tokens under its start instant formatted in loc with layout.
+func sumByKey(buckets []Bucket, loc *time.Location, layout string) map[string]Pair {
+	sums := make(map[string]Pair)
+	for _, b := range buckets {
+		k := b.Start.In(loc).Format(layout)
+		p := sums[k]
+		p.Input += b.Input
+		p.Output += b.Output
+		sums[k] = p
+	}
+	return sums
+}
+
+// fillSeries builds the input and output series of length n. Index i takes the
+// wrapped pair from at when at reports ok; otherwise it stays the zero value.
+func fillSeries[T any](n int, at func(i int) (Pair, bool), wrap func(int64) T) (input, output []T) {
+	input = make([]T, n)
+	output = make([]T, n)
+	for i := range n {
+		p, ok := at(i)
+		if !ok {
 			continue
 		}
-		p := daily[day.Format(dayLayout)]
-		in, out := p.Input, p.Output
-		t.Daily.Input = append(t.Daily.Input, &in)
-		t.Daily.Output = append(t.Daily.Output, &out)
+		input[i] = wrap(p.Input)
+		output[i] = wrap(p.Output)
 	}
-	return t
+	return input, output
 }

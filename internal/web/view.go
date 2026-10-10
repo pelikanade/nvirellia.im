@@ -15,7 +15,6 @@ import (
 // page is the template data for the sheet. Field names are used by templates/*.html.
 type page struct {
 	Resources bool // magpie has data: the Resources tab, its panel, and the status readouts render
-	Dev       bool
 	FeedJSON  template.JS
 	Updated   string
 	Readouts  readouts
@@ -98,7 +97,7 @@ func hourLabel(start time.Time, i int) string {
 	return fmt.Sprintf("%02d:00", (start.Hour()+i)%24)
 }
 
-// fmtTokens matches the monitor's readout format: 4477200 -> "4.5M", 182300 -> "182k", 4710 -> "4.7k".
+// fmtTokens matches the page script's readout format: 4477200 -> "4.5M", 182300 -> "182k", 4710 -> "4.7k".
 func fmtTokens(n int64) string {
 	switch {
 	case n >= 1e6:
@@ -110,4 +109,9 @@ func fmtTokens(n int64) string {
 	default:
 		return strconv.FormatInt(n, 10)
 	}
+}
+
+// icon is the sprite reference for id, a fixed literal from the templates.
+func icon(id string) template.HTML {
+	return template.HTML(`<svg class="ic" aria-hidden="true"><use href="#` + id + `"/></svg>`)
 }

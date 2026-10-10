@@ -1,10 +1,8 @@
 /* Profile — System Monitor. Small vanilla JS, no libraries.
-   Ported from the v2.1 prototype script. Without JS the page is the static Profile
+   Without JS the page is the static Profile
    sheet; Resources still renders server-side and is reached via #resources (:target).
 
-   Data: the feed embedded in <script id="cl-stats"> (same JSON as /api/stats.json).
-Readouts, legend values, and the footer total are rendered by the server and swapped in by id every 60 s from /fragments/readouts.
-   The graph, heatmap, and sparkline are redrawn from /api/stats.json every 60 s while the tab is visible.
+   Data: the feed embedded in <script id="cl-stats">. Drawn once on load; not refreshed.
 
    URL hash: #profile | #resources picks a tab (plain links work too);
    range=7d starts the history graph on the 7-day range. */
@@ -26,10 +24,9 @@ Readouts, legend values, and the footer total are rendered by the server and swa
   const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const TABS = ['profile', 'resources'].filter(n => document.getElementById(n));   // the resources panel exists only when magpie has data
-  const REFRESH_MS = 60 * 1000;
 
-  let data = JSON.parse($('#cl-stats').textContent);
-  let m = null;                       // derived view of `data`, rebuilt on every refresh
+  const data = JSON.parse($('#cl-stats').textContent);
+  let m = null;                       // derived view of `data`, rebuilt on every render
   let range = 'today';
 
   function derive(d) {
@@ -92,7 +89,7 @@ Readouts, legend values, and the footer total are rendered by the server and swa
   }
   window.addEventListener('hashchange', applyHash);
 
-  /* ---------- Resources: history graph (SVG, redrawn on resize / range change / refresh) ---------- */
+  /* ---------- Resources: history graph (SVG, redrawn on resize / range change) ---------- */
   const niceStep = v => { const p = 10 ** Math.floor(Math.log10(v)); return p * [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find(k => k * p >= v); };
   function series() {
     const { T, last } = m;
@@ -173,33 +170,8 @@ Readouts, legend values, and the footer total are rendered by the server and swa
   function render() {
     m = derive(data);
     if (!m || !$('#resources')) return;                             // magpie has no data: no panel to draw
-    renderStatus(); renderHeat(); renderGraph();
+    renderStatus(); renderHeat(); drawGraph();
   }
-  function renderGraph() { drawGraph(); }
-
-/* ---------- live refresh: feed drives graph + heatmap; fragment drives readouts ---------- */
-async function refresh() {
-  if (document.visibilityState !== 'visible') return;
-  // either side failing (offline, a blip) keeps its last values on screen
-  await Promise.allSettled([refreshFeed(), refreshReadouts()]);
-}
-async function refreshFeed() {
-  const res = await fetch('/api/stats.json', { cache: 'no-store', headers: { accept: 'application/json' } });
-  if (!res.ok) return;
-  data = await res.json();
-  render();
-}
-async function refreshReadouts() {
-  const res = await fetch('/fragments/readouts', { cache: 'no-store' });
-  if (!res.ok) return;
-  const fresh = document.createElement('template');
-  fresh.innerHTML = await res.text();
-  // each server-rendered readout carries its id; replace the matching element in place
-  for (const el of Array.from(fresh.content.children)) {
-    const cur = document.getElementById(el.id);
-    if (cur) cur.replaceWith(el);
-  }
-}
 
   /* ---------- window controls: minimise / maximise / close ---------- */
   const win = $('.window'), dlg = $('#quit-dlg'), info = $('#infobar');
@@ -224,5 +196,4 @@ async function refreshReadouts() {
   render();
   const o = applyHash();
   if (o.range === '7d') $('[data-range="7d"]')?.click();
-  setInterval(refresh, REFRESH_MS);
 })();

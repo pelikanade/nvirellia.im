@@ -25,9 +25,9 @@ const maxBody = 8 << 20
 // An unknown period silently falls back to 30 days, so every series is checked
 // against the period and bucket it was asked for.
 type Magpie struct {
-	BaseURL string
-	Key     string
-	Client  *http.Client
+	baseURL string
+	key     string
+	client  *http.Client
 }
 
 // NewMagpie returns a client that keeps magpie's session cookie in its own jar.
@@ -39,7 +39,7 @@ func NewMagpie(baseURL, key string) (*Magpie, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Magpie{BaseURL: baseURL, Key: key, Client: &http.Client{Jar: jar}}, nil
+	return &Magpie{baseURL: baseURL, key: key, client: &http.Client{Jar: jar}}, nil
 }
 
 // Usage implements TokenSource.
@@ -61,18 +61,18 @@ func (m *Magpie) Usage(ctx context.Context) (Usage, error) {
 // login exchanges the key for the session cookie. The key travels only in this
 // request's query, and errors never carry the URL.
 func (m *Magpie) login(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.endpoint("/", url.Values{"k": {m.Key}}), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.endpoint("/", url.Values{"k": {m.key}}), nil)
 	if err != nil {
 		return fmt.Errorf("magpie: %w", errorWithoutURL(err))
 	}
-	noFollow := *m.Client
+	noFollow := *m.client
 	noFollow.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	resp, err := noFollow.Do(req)
 	if err != nil {
 		return fmt.Errorf("magpie: login request failed: %w", errorWithoutURL(err))
 	}
 	defer resp.Body.Close()
-	io.Copy(io.Discard, io.LimitReader(resp.Body, maxBody))
+	drainBody(resp)
 	if resp.StatusCode != http.StatusSeeOther {
 		return fmt.Errorf("magpie: login HTTP %d", resp.StatusCode)
 	}
@@ -93,7 +93,7 @@ type wireUsage struct {
 // usage fetches one period and rejects it unless magpie served that period at that grain.
 func (m *Magpie) usage(ctx context.Context, period, bucket string) ([]Bucket, error) {
 	var body wireUsage
-	if err := getJSON(ctx, m.Client, m.endpoint("/api/usage", url.Values{"period": {period}}), "", "magpie", &body); err != nil {
+	if err := getJSON(ctx, m.client, m.endpoint("/api/usage", url.Values{"period": {period}}), "magpie", &body); err != nil {
 		return nil, err
 	}
 	if body.Period != period || body.Bucket != bucket {
@@ -108,31 +108,33 @@ func (m *Magpie) usage(ctx context.Context, period, bucket string) ([]Bucket, er
 
 // endpoint joins a path and query onto the base URL.
 func (m *Magpie) endpoint(path string, q url.Values) string {
-	u := strings.TrimRight(m.BaseURL, "/") + path
+	u := strings.TrimRight(m.baseURL, "/") + path
 	if len(q) > 0 {
 		u += "?" + q.Encode()
 	}
 	return u
 }
 
-// getJSON GETs a URL with an optional bearer token and decodes the JSON body.
-// Errors name the upstream and status only; the token and body never appear in them.
-func getJSON(ctx context.Context, client *http.Client, target, token, name string, out any) error {
+// drainBody discards up to maxBody bytes left in resp's body so the connection can be reused.
+func drainBody(resp *http.Response) {
+	io.Copy(io.Discard, io.LimitReader(resp.Body, maxBody))
+}
+
+// getJSON GETs a URL and decodes the JSON body.
+// Errors name the upstream and status only; the body never appears in them.
+func getJSON(ctx context.Context, client *http.Client, target, name string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return fmt.Errorf("%s: %w", name, err)
 	}
 	req.Header.Set("Accept", "application/json")
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("%s: request failed: %w", name, errorWithoutURL(err))
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		io.Copy(io.Discard, io.LimitReader(resp.Body, maxBody))
+		drainBody(resp)
 		return fmt.Errorf("%s: HTTP %d", name, resp.StatusCode)
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(out); err != nil {
