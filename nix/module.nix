@@ -79,6 +79,40 @@ in
       };
     };
 
+    gatus = {
+      url = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "http://127.0.0.1:3001";
+        description = ''
+          Base URL of the gatus instance whose uptime checks fill the Status
+          tab. When null, the uptime half of the tab is omitted.
+        '';
+      };
+    };
+
+    prometheus = {
+      url = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "http://127.0.0.1:9090";
+        description = ''
+          Base URL of the Prometheus HTTP API whose node probes fill the Status
+          tab. When null, the probe half of the tab is omitted.
+        '';
+      };
+
+      job = mkOption {
+        type = types.str;
+        default = "node";
+        example = "node";
+        description = ''
+          Scrape job holding the node_exporter targets (`PROMETHEUS_JOB`). The
+          targets should carry a `host` label with the display name.
+        '';
+      };
+    };
+
     openFirewall = mkEnableOption "opening the configured port in the firewall";
   };
 
@@ -91,6 +125,10 @@ in
       {
         assertion = cfg.magpie.keyFile == null || cfg.magpie.url != null;
         message = "services.nvirellia.magpie.keyFile has no effect without magpie.url.";
+      }
+      {
+        assertion = cfg.prometheus.url == null || cfg.prometheus.job != "";
+        message = "services.nvirellia.prometheus.job must not be empty.";
       }
     ];
 
@@ -107,6 +145,13 @@ in
       }
       // optionalAttrs (cfg.magpie.url != null) {
         MAGPIE_URL = cfg.magpie.url;
+      }
+      // optionalAttrs (cfg.gatus.url != null) {
+        GATUS_URL = cfg.gatus.url;
+      }
+      // optionalAttrs (cfg.prometheus.url != null) {
+        PROMETHEUS_URL = cfg.prometheus.url;
+        PROMETHEUS_JOB = cfg.prometheus.job;
       };
 
       serviceConfig = {

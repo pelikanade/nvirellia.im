@@ -108,7 +108,12 @@ func (m *Magpie) usage(ctx context.Context, period, bucket string) ([]Bucket, er
 
 // endpoint joins a path and query onto the base URL.
 func (m *Magpie) endpoint(path string, q url.Values) string {
-	u := strings.TrimRight(m.baseURL, "/") + path
+	return joinURL(m.baseURL, path, q)
+}
+
+// joinURL joins path and q onto baseURL, which may carry a trailing slash.
+func joinURL(baseURL, path string, q url.Values) string {
+	u := strings.TrimRight(baseURL, "/") + path
 	if len(q) > 0 {
 		u += "?" + q.Encode()
 	}

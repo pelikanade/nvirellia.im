@@ -1,5 +1,6 @@
-// Package feed builds the nvirellia.im feed: token windows from magpie. Tokens is
-// nil while magpie has no data (unconfigured, unreachable, or no buckets).
+// Package feed builds the nvirellia.im feed: token windows from magpie, uptime
+// from gatus, and host probes from prometheus. Each section is nil while its
+// upstream has no data (unconfigured, unreachable, or empty).
 package feed
 
 import (
@@ -20,11 +21,77 @@ func Location() (*time.Location, error) {
 	return time.LoadLocation(zoneName)
 }
 
-// Feed is the nvirellia.im profile feed: generation time, day zone, and token windows.
+// Feed is the nvirellia.im profile feed: generation time, day zone, token
+// windows, and the status tab's uptime checks and host probes.
 type Feed struct {
 	GeneratedAt string  `json:"generatedAt"`
 	TZ          string  `json:"tz"`
 	Tokens      *Tokens `json:"tokens"`
+	Status      *Status `json:"status"`
+}
+
+// Status is the status tab: gatus checks and prometheus probes. Either half is
+// nil when its upstream has no data.
+type Status struct {
+	Uptime *Uptime `json:"uptime"`
+	Probes *Probes `json:"probes"`
+}
+
+// Uptime is gatus' view of the checks it runs, one row per monitor.
+type Uptime struct {
+	Endpoints []Endpoint `json:"endpoints"`
+}
+
+// Endpoint is one gatus monitor. Uptime24h and Uptime7d are percentages in
+// [0, 100]; nil means gatus had no uptime data for that window.
+type Endpoint struct {
+	Name      string   `json:"name"`
+	Group     string   `json:"group"`
+	Key       string   `json:"key"`
+	Known     bool     `json:"known"` // a result has been recorded
+	Up        bool     `json:"up"`
+	Status    int      `json:"status,omitempty"` // HTTP status of the last result
+	LatencyMS int64    `json:"latencyMs,omitempty"`
+	CheckedAt string   `json:"checkedAt,omitempty"` // RFC 3339
+	Uptime24h *float64 `json:"uptime24h"`
+	Uptime7d  *float64 `json:"uptime7d"`
+
+	// Results is the recent check history, oldest first, from gatus' status
+	// API. The Status tab draws one bar segment per result.
+	Results []Check `json:"results,omitempty"`
+}
+
+// Check is one gatus result.
+type Check struct {
+	Up        bool   `json:"up"`
+	Status    int    `json:"status,omitempty"`
+	LatencyMS int64  `json:"latencyMs,omitempty"`
+	At        string `json:"at,omitempty"` // RFC 3339
+}
+
+// Probes is Prometheus' view of the hosts it scrapes.
+type Probes struct {
+	Systems []Probe `json:"systems"`
+}
+
+// Probe is one Prometheus target. UptimeSeconds, CPU, Mem and Disk are nil
+// when the target is down or the metric is missing; Status is up, down, or
+// unknown.
+type Probe struct {
+	Name          string   `json:"name"`
+	Host          string   `json:"host,omitempty"`
+	Status        string   `json:"status"`
+	UptimeSeconds *uint64  `json:"uptimeSeconds,omitempty"`
+	CPU           *float64 `json:"cpu,omitempty"`
+	Mem           *float64 `json:"mem,omitempty"`
+	Disk          *float64 `json:"disk,omitempty"`
+	Updated       string   `json:"updated,omitempty"` // RFC 3339
+
+	// Histories are percentage samples, oldest first, over the last
+	// ProbeHistoryWindow.
+	CPUHistory  []float64 `json:"cpuHistory,omitempty"`
+	MemHistory  []float64 `json:"memHistory,omitempty"`
+	DiskHistory []float64 `json:"diskHistory,omitempty"`
 }
 
 // Tokens is the magpie-derived part of the feed.
