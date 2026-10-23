@@ -3,6 +3,8 @@ package web
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"html/template"
 	"io"
 	"io/fs"
@@ -24,11 +26,15 @@ type server struct {
 
 // NewHandler routes the site from assets, which must contain templates/ and static/.
 func NewHandler(feeds Feeds, assets fs.FS) (http.Handler, error) {
-	pages, err := template.New("").Funcs(template.FuncMap{"icon": icon}).ParseFS(assets, "templates/*.html")
+	static, err := fs.Sub(assets, "static")
 	if err != nil {
 		return nil, err
 	}
-	static, err := fs.Sub(assets, "static")
+	funcs := template.FuncMap{
+		"icon":  icon,
+		"asset": assetURL(static),
+	}
+	pages, err := template.New("").Funcs(funcs).ParseFS(assets, "templates/*.html")
 	if err != nil {
 		return nil, err
 	}
@@ -60,6 +66,20 @@ func (s *server) index(w http.ResponseWriter, _ *http.Request) {
 func healthz(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	io.WriteString(w, "ok")
+}
+
+// assetURL returns a template function that appends the file's content hash to
+// its URL. A changed asset gets a new URL, so the week-long cache can never
+// pair fresh HTML with a stale stylesheet or script.
+func assetURL(static fs.FS) func(string) (string, error) {
+	return func(name string) (string, error) {
+		b, err := fs.ReadFile(static, name)
+		if err != nil {
+			return "", err
+		}
+		h := sha256.Sum256(b)
+		return "/static/" + name + "?v=" + hex.EncodeToString(h[:])[:12], nil
+	}
 }
 
 func longCache(h http.Handler) http.Handler {

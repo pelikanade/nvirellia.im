@@ -10,8 +10,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Noa Virellia — Profile</title>
 <script>document.documentElement.classList.replace("no-js", "js");</script>
-<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-<link rel="stylesheet" href="/static/clearlooks.css">
+<link rel="icon" type="image/svg+xml" href="{{asset "favicon.svg"}}">
+<link rel="stylesheet" href="{{asset "clearlooks.css"}}">
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -77,6 +77,6 @@
 {{template "quit-dialog" .}}
 
 <script type="application/json" id="cl-stats">{{.FeedJSON}}</script>
-<script src="/static/scripts.js" defer></script>
+<script src="{{asset "scripts.js"}}" defer></script>
 </body>
 </html>
