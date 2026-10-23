@@ -9,3 +9,7 @@ devenv.local.yaml
 # secrets (MAGPIE_WEB_KEY and friends)
 .env
 .env.*
+
+# nix build
+/result
+/result-*
