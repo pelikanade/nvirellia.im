@@ -55,6 +55,18 @@ type Endpoint struct {
 	CheckedAt string   `json:"checkedAt,omitempty"` // RFC 3339
 	Uptime24h *float64 `json:"uptime24h"`
 	Uptime7d  *float64 `json:"uptime7d"`
+
+	// Results is the recent check history, oldest first, from gatus' status
+	// API. The Status tab draws one bar segment per result.
+	Results []Check `json:"results,omitempty"`
+}
+
+// Check is one gatus result.
+type Check struct {
+	Up        bool   `json:"up"`
+	Status    int    `json:"status,omitempty"`
+	LatencyMS int64  `json:"latencyMs,omitempty"`
+	At        string `json:"at,omitempty"` // RFC 3339
 }
 
 // Probes is Prometheus' view of the hosts it scrapes.
@@ -74,6 +86,12 @@ type Probe struct {
 	Mem           *float64 `json:"mem,omitempty"`
 	Disk          *float64 `json:"disk,omitempty"`
 	Updated       string   `json:"updated,omitempty"` // RFC 3339
+
+	// Histories are percentage samples, oldest first, over the last
+	// ProbeHistoryWindow.
+	CPUHistory  []float64 `json:"cpuHistory,omitempty"`
+	MemHistory  []float64 `json:"memHistory,omitempty"`
+	DiskHistory []float64 `json:"diskHistory,omitempty"`
 }
 
 // Tokens is the magpie-derived part of the feed.

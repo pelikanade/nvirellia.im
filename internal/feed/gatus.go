@@ -37,8 +37,10 @@ func NewGatus(baseURL string) (*Gatus, error) {
 
 // Uptime implements UptimeSource.
 func (g *Gatus) Uptime(ctx context.Context) (Uptime, error) {
+	// Ask for the history Gatus' own cards draw: one segment per result.
+	q := url.Values{"page": {"1"}, "pageSize": {"50"}}
 	var statuses []gatusStatus
-	if err := getJSON(ctx, g.client, g.endpoint("/api/v1/endpoints/statuses", nil), "gatus", &statuses); err != nil {
+	if err := getJSON(ctx, g.client, g.endpoint("/api/v1/endpoints/statuses", q), "gatus", &statuses); err != nil {
 		return Uptime{}, err
 	}
 
@@ -55,6 +57,18 @@ func (g *Gatus) Uptime(ctx context.Context) (Uptime, error) {
 			endpoints[i].LatencyMS = last.Duration / int64(time.Millisecond)
 			if !last.Timestamp.IsZero() {
 				endpoints[i].CheckedAt = last.Timestamp.UTC().Format(time.RFC3339)
+			}
+			results := s.Results
+			if len(results) > 50 {
+				results = results[len(results)-50:]
+			}
+			endpoints[i].Results = make([]Check, len(results))
+			for j, r := range results {
+				c := Check{Up: r.Success, Status: r.Status, LatencyMS: r.Duration / int64(time.Millisecond)}
+				if !r.Timestamp.IsZero() {
+					c.At = r.Timestamp.UTC().Format(time.RFC3339)
+				}
+				endpoints[i].Results[j] = c
 			}
 		}
 		wg.Add(2)

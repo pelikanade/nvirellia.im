@@ -124,15 +124,14 @@ func newGatusStub(t *testing.T) *gatusStub {
 	s := &gatusStub{}
 	type endpoint struct {
 		name, group, key string
-		status           int
-		success          bool
+		history          []bool
 	}
 	endpoints := []endpoint{
-		{"Gatus", "Edge", "edge_gatus", 200, true},
-		{"Paseo daemon", "Neko Sphere", "neko-sphere_paseo-daemon", 503, false},
-		{"nuts.nvirellia.im", "Noa's IVs", "noa's-ivs_nuts-nvirellia-im", 200, true},
+		{"Gatus", "Edge", "edge_gatus", []bool{true, true, true}},
+		{"Paseo daemon", "Neko Sphere", "neko-sphere_paseo-daemon", []bool{true, true, false}},
+		{"nuts.nvirellia.im", "Noa's IVs", "noa's-ivs_nuts-nvirellia-im", []bool{true, false, true}},
 	}
-	checked := "2026-10-23T15:00:00Z"
+	checked := time.Date(2026, 10, 23, 15, 0, 0, 0, time.UTC)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/endpoints/statuses", func(w http.ResponseWriter, r *http.Request) {
 		s.hits.Add(1)
@@ -142,12 +141,21 @@ func newGatusStub(t *testing.T) *gatusStub {
 		}
 		statuses := make([]map[string]any, len(endpoints))
 		for i, e := range endpoints {
+			results := make([]map[string]any, len(e.history))
+			for j, up := range e.history {
+				status := 200
+				if !up {
+					status = 503
+				}
+				results[j] = map[string]any{
+					"status": status, "success": up,
+					"timestamp": checked.Add(time.Duration(j) * time.Minute).Format(time.RFC3339Nano),
+					"duration":  int64(12 * time.Millisecond),
+				}
+			}
 			statuses[i] = map[string]any{
 				"name": e.name, "group": e.group, "key": e.key,
-				"results": []map[string]any{{
-					"status": e.status, "success": e.success, "timestamp": checked,
-					"duration": int64(12 * time.Millisecond),
-				}},
+				"results": results,
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -219,21 +227,6 @@ func newPrometheusStub(t *testing.T) *prometheusStub {
 				{"metric": edge, "value": []any{at, strconv.FormatUint(12*86400+4*3600, 10)}},
 				{"metric": neko, "value": []any{at, strconv.FormatUint(3*3600, 10)}},
 			}
-		case strings.Contains(q, "node_cpu_seconds_total"):
-			result = []map[string]any{
-				{"metric": edge, "value": []any{at, "12.4"}},
-				{"metric": neko, "value": []any{at, "94.6"}},
-			}
-		case strings.Contains(q, "node_memory_MemAvailable_bytes"):
-			result = []map[string]any{
-				{"metric": edge, "value": []any{at, "38.2"}},
-				{"metric": neko, "value": []any{at, "91.0"}},
-			}
-		case strings.Contains(q, "node_filesystem_avail_bytes"):
-			result = []map[string]any{
-				{"metric": edge, "value": []any{at, "61.9"}},
-				{"metric": neko, "value": []any{at, "88.0"}},
-			}
 		default:
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]any{"status": "error", "error": "unexpected query"})
@@ -242,6 +235,45 @@ func newPrometheusStub(t *testing.T) *prometheusStub {
 		json.NewEncoder(w).Encode(map[string]any{
 			"status": "success",
 			"data":   map[string]any{"resultType": "vector", "result": result},
+		})
+	})
+	mux.HandleFunc("GET /api/v1/query_range", func(w http.ResponseWriter, r *http.Request) {
+		s.hits.Add(1)
+		if s.down.Load() {
+			http.Error(w, "down", http.StatusServiceUnavailable)
+			return
+		}
+		q := r.URL.Query().Get("query")
+		if !strings.Contains(q, `job="node"`) {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]any{"status": "error", "error": "unexpected job"})
+			return
+		}
+		var result []map[string]any
+		switch {
+		case strings.Contains(q, "node_cpu_seconds_total"):
+			result = []map[string]any{
+				{"metric": edge, "values": [][2]any{{at - 600, "10"}, {at - 300, "11"}, {at, "12.4"}}},
+				{"metric": neko, "values": [][2]any{{at - 600, "90"}, {at - 300, "92"}, {at, "94.6"}}},
+			}
+		case strings.Contains(q, "node_memory_MemAvailable_bytes"):
+			result = []map[string]any{
+				{"metric": edge, "values": [][2]any{{at - 600, "30"}, {at - 300, "34"}, {at, "38.2"}}},
+				{"metric": neko, "values": [][2]any{{at - 600, "89"}, {at - 300, "90"}, {at, "91.0"}}},
+			}
+		case strings.Contains(q, "node_filesystem_avail_bytes"):
+			result = []map[string]any{
+				{"metric": edge, "values": [][2]any{{at - 600, "60"}, {at - 300, "61"}, {at, "61.9"}}},
+				{"metric": neko, "values": [][2]any{{at - 600, "87"}, {at - 300, "87.5"}, {at, "88.0"}}},
+			}
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]any{"status": "error", "error": "unexpected range query"})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": "success",
+			"data":   map[string]any{"resultType": "matrix", "result": result},
 		})
 	})
 	srv := httptest.NewServer(mux)
@@ -374,13 +406,18 @@ type statsResp struct {
 				Up        bool     `json:"up"`
 				Uptime24h *float64 `json:"uptime24h"`
 				Uptime7d  *float64 `json:"uptime7d"`
+				Results   []struct {
+					Up bool   `json:"up"`
+					At string `json:"at"`
+				} `json:"results"`
 			} `json:"endpoints"`
 		} `json:"uptime"`
 		Probes *struct {
 			Systems []struct {
-				Name   string   `json:"name"`
-				Status string   `json:"status"`
-				CPU    *float64 `json:"cpu"`
+				Name       string    `json:"name"`
+				Status     string    `json:"status"`
+				CPU        *float64  `json:"cpu"`
+				CPUHistory []float64 `json:"cpuHistory"`
 			} `json:"systems"`
 		} `json:"probes"`
 	} `json:"status"`
@@ -563,13 +600,16 @@ func TestGatusServesUptime(t *testing.T) {
 		t.Fatal("Paseo daemon endpoint missing")
 	} else if e := eps[i]; !e.Known || e.Up {
 		t.Errorf("Paseo daemon = %+v, want known down", e)
+	} else if n := len(e.Results); n != 3 || e.Results[n-1].Up {
+		t.Errorf("Paseo daemon history = %+v, want 3 results ending down", e.Results)
 	}
 	if stub.hits.Load() == 0 {
 		t.Error("gatus was never queried")
 	}
 
 	_, page := get(t, base+"/")
-	for _, want := range []string{`id="status"`, `href="#status"`, "99.99%", "Paseo daemon", "down", "12ms"} {
+	for _, want := range []string{`id="status"`, `href="#status"`, "99.99%", "Paseo daemon", "down", "12ms",
+		`class="useg up"`, `class="useg down"`, "2 of 3 checks up", "HTTP 503"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page missing %q", want)
 		}
@@ -597,15 +637,19 @@ func TestPrometheusServesProbes(t *testing.T) {
 	if systems[0].Status != "up" || systems[0].CPU == nil || *systems[0].CPU < 12.39 || *systems[0].CPU > 12.41 {
 		t.Errorf("edge = %+v, want up with 12.4%% CPU", systems[0])
 	}
-	if systems[1].Status != "down" || systems[1].CPU != nil {
+	if systems[1].Status != "down" || systems[1].CPU != nil || len(systems[1].CPUHistory) != 0 {
 		t.Errorf("neko-sphere = %+v, want down with no live metrics", systems[1])
+	}
+	if n := len(systems[0].CPUHistory); n != 3 || systems[0].CPUHistory[n-1] < 12.39 {
+		t.Errorf("edge CPU history = %+v, want 3 samples ending at 12.4", systems[0].CPUHistory)
 	}
 	if stub.hits.Load() == 0 {
 		t.Error("prometheus was never queried")
 	}
 
 	_, page := get(t, base+"/")
-	for _, want := range []string{`id="status"`, `href="#status"`, "neko-sphere", "12d 4h", "12%", "38%", "62%", "down"} {
+	for _, want := range []string{`id="status"`, `href="#status"`, "neko-sphere", "12d 4h", "12%", "38%", "62%", "down",
+		`class="sparkline"`, `class="spark-l cpu"`, `style="width: 12%"`, "no history"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page missing %q", want)
 		}
