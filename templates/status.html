@@ -1,0 +1,48 @@
+{{define "status"}}{{if .Status}}
+<section id="status" class="mon tabpanel" role="tabpanel" aria-labelledby="tab-status">
+  <div class="mon-head">
+    <h2>Status</h2>
+    <span class="aside">uptime checks via gatus, host probes via prometheus; times in UTC+8</span>
+  </div>
+{{with .Status.Uptime}}
+  <section class="frame" aria-labelledby="h-uptime">
+    <h3 class="legend" id="h-uptime">{{icon "i-pulse"}}Uptime</h3>
+    <div class="table-scroll">
+      <table class="status-table">
+        <thead><tr><th scope="col">check</th><th scope="col">state</th><th scope="col">24h</th><th scope="col">7d</th><th scope="col">last</th></tr></thead>
+        <tbody>
+{{range .Endpoints}}          <tr>
+            <td><b>{{.Name}}</b><span class="sub">{{.Group}}</span></td>
+            <td><span class="state {{.State}}">{{.State}}</span></td>
+            <td class="num">{{.Uptime24h}}</td>
+            <td class="num">{{.Uptime7d}}</td>
+            <td class="num">{{.Last}}</td>
+          </tr>
+{{end}}        </tbody>
+      </table>
+    </div>
+  </section>
+{{end}}
+{{with .Status.Probes}}
+  <section class="frame" aria-labelledby="h-probes">
+    <h3 class="legend" id="h-probes">{{icon "i-pulse"}}Probes</h3>
+    <div class="table-scroll">
+      <table class="status-table">
+        <thead><tr><th scope="col">host</th><th scope="col">state</th><th scope="col">up for</th><th scope="col">cpu</th><th scope="col">memory</th><th scope="col">disk</th><th scope="col">seen</th></tr></thead>
+        <tbody>
+{{range .Systems}}          <tr>
+            <td><b>{{.Name}}</b>{{if .Host}}<span class="sub">{{.Host}}</span>{{end}}</td>
+            <td><span class="state {{.State}}">{{.State}}</span></td>
+            <td class="num">{{.Uptime}}</td>
+            <td class="num">{{.CPU}}</td>
+            <td class="num">{{.Mem}}</td>
+            <td class="num">{{.Disk}}</td>
+            <td class="num">{{.Seen}}</td>
+          </tr>
+{{end}}        </tbody>
+      </table>
+    </div>
+  </section>
+{{end}}
+</section>
+{{end}}{{end}}

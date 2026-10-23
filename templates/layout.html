@@ -46,15 +46,18 @@
     <div role="tablist" aria-label="Profile window" class="js-only">
       <button type="button" role="tab" class="ntab" id="tab-profile" aria-controls="profile" aria-selected="true">{{icon "i-person"}}Profile</button>
       <button type="button" role="tab" class="ntab" id="tab-resources" aria-controls="resources" aria-selected="false" tabindex="-1"{{if not .Resources}} disabled{{end}}>{{icon "i-chart"}}Resources</button>
+      <button type="button" role="tab" class="ntab" id="tab-status" aria-controls="status" aria-selected="false" tabindex="-1"{{if not .Status}} disabled{{end}}>{{icon "i-pulse"}}Status</button>
     </div>
     <nav class="nojs-only nojs-tabs" aria-label="Sections">
       <a class="ntab" href="#profile" aria-current="page">{{icon "i-person"}}Profile</a>
       {{if .Resources}}<a class="ntab" href="#resources">{{icon "i-chart"}}Resources</a>{{else}}<span class="ntab" aria-disabled="true">{{icon "i-chart"}}Resources</span>{{end}}
+      {{if .Status}}<a class="ntab" href="#status">{{icon "i-pulse"}}Status</a>{{else}}<span class="ntab" aria-disabled="true">{{icon "i-pulse"}}Status</span>{{end}}
     </nav>
   </div>
 
   {{template "profile" .}}
   {{template "resources" .}}
+  {{template "status" .}}
   </main>
 
   <footer class="statusbar">

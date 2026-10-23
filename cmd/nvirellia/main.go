@@ -18,19 +18,26 @@ import (
 )
 
 type config struct {
-	ListenAddr string
-	FeedTTL    time.Duration
-	MagpieURL  string
-	MagpieKey  string
+	ListenAddr    string
+	FeedTTL       time.Duration
+	MagpieURL     string
+	MagpieKey     string
+	GatusURL      string
+	PrometheusURL string
+	PrometheusJob string
 }
 
-// loadConfig reads the environment. An unset MAGPIE_URL leaves magpie unconfigured,
-// so the sheet renders without the Resources panel.
+// loadConfig reads the environment. An unset MAGPIE_URL leaves magpie
+// unconfigured, so the sheet renders without the Resources panel; an unset
+// GATUS_URL or PROMETHEUS_URL leaves that half of the Status panel out.
 func loadConfig(getenv func(string) string) (config, error) {
 	c := config{
-		ListenAddr: orDefault(getenv("LISTEN_ADDR"), ":8080"),
-		MagpieURL:  getenv("MAGPIE_URL"),
-		MagpieKey:  getenv("MAGPIE_WEB_KEY"),
+		ListenAddr:    orDefault(getenv("LISTEN_ADDR"), ":8080"),
+		MagpieURL:     getenv("MAGPIE_URL"),
+		MagpieKey:     getenv("MAGPIE_WEB_KEY"),
+		GatusURL:      getenv("GATUS_URL"),
+		PrometheusURL: getenv("PROMETHEUS_URL"),
+		PrometheusJob: orDefault(getenv("PROMETHEUS_JOB"), "node"),
 	}
 	ttl, err := time.ParseDuration(orDefault(getenv("FEED_TTL"), "30s"))
 	if err != nil {
@@ -78,7 +85,24 @@ func run() error {
 		}
 		tokens = magpie
 	}
-	svc := feed.New(feed.Config{Location: loc, TTL: cfg.FeedTTL}, tokens)
+	var uptime feed.UptimeSource
+	if cfg.GatusURL != "" {
+		gatus, err := feed.NewGatus(cfg.GatusURL)
+		if err != nil {
+			return err
+		}
+		uptime = gatus
+	}
+	var probes feed.ProbeSource
+	if cfg.PrometheusURL != "" {
+		prometheus, err := feed.NewPrometheus(cfg.PrometheusURL, cfg.PrometheusJob)
+		if err != nil {
+			return err
+		}
+		probes = prometheus
+	}
+	svc := feed.New(feed.Config{Location: loc, TTL: cfg.FeedTTL},
+		feed.Sources{Tokens: tokens, Uptime: uptime, Probes: probes})
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

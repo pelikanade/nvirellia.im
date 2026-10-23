@@ -4,7 +4,7 @@
 
    Data: the feed embedded in <script id="cl-stats">. Drawn once on load; not refreshed.
 
-   URL hash: #profile | #resources picks a tab (plain links work too);
+   URL hash: #profile | #resources | #status picks a tab (plain links work too);
    range=7d starts the history graph on the 7-day range. */
 (() => {
   'use strict';
@@ -23,7 +23,7 @@
     : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n);
   const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const TABS = ['profile', 'resources'].filter(n => document.getElementById(n));   // the resources panel exists only when magpie has data
+  const TABS = ['profile', 'resources', 'status'].filter(n => document.getElementById(n));   // panels exist only when their upstreams have data
 
   const data = JSON.parse($('#cl-stats').textContent);
   let m = null;                       // derived view of `data`, rebuilt on every render

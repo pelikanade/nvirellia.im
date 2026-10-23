@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -109,6 +110,146 @@ func newMagpieStub(t *testing.T, key string, hours, days []series) *magpieStub {
 	return s
 }
 
+// gatusStub speaks gatus' status API. Every monitor reports 99.99% over 24h and
+// 99.90% over 7d; one key contains an apostrophe so uptime path escaping is
+// exercised. Setting down makes every request fail.
+type gatusStub struct {
+	URL  string
+	down atomic.Bool
+	hits atomic.Int64
+}
+
+func newGatusStub(t *testing.T) *gatusStub {
+	t.Helper()
+	s := &gatusStub{}
+	type endpoint struct {
+		name, group, key string
+		status           int
+		success          bool
+	}
+	endpoints := []endpoint{
+		{"Gatus", "Edge", "edge_gatus", 200, true},
+		{"Paseo daemon", "Neko Sphere", "neko-sphere_paseo-daemon", 503, false},
+		{"nuts.nvirellia.im", "Noa's IVs", "noa's-ivs_nuts-nvirellia-im", 200, true},
+	}
+	checked := "2026-10-23T15:00:00Z"
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/endpoints/statuses", func(w http.ResponseWriter, r *http.Request) {
+		s.hits.Add(1)
+		if s.down.Load() {
+			http.Error(w, "down", http.StatusServiceUnavailable)
+			return
+		}
+		statuses := make([]map[string]any, len(endpoints))
+		for i, e := range endpoints {
+			statuses[i] = map[string]any{
+				"name": e.name, "group": e.group, "key": e.key,
+				"results": []map[string]any{{
+					"status": e.status, "success": e.success, "timestamp": checked,
+					"duration": int64(12 * time.Millisecond),
+				}},
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(statuses)
+	})
+	mux.HandleFunc("GET /api/v1/endpoints/", func(w http.ResponseWriter, r *http.Request) {
+		s.hits.Add(1)
+		if s.down.Load() {
+			http.Error(w, "down", http.StatusServiceUnavailable)
+			return
+		}
+		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/endpoints/"), "/")
+		if len(parts) != 3 || parts[1] != "uptimes" {
+			http.NotFound(w, r)
+			return
+		}
+		switch parts[2] {
+		case "24h":
+			io.WriteString(w, "0.999900")
+		case "7d":
+			io.WriteString(w, "0.999000")
+		default:
+			http.Error(w, "unknown duration", http.StatusBadRequest)
+		}
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	s.URL = srv.URL
+	return s
+}
+
+// prometheusStub answers /api/v1/query. Two node targets are scraped: edge is
+// up, neko-sphere is down; the metric queries still carry stale neko-sphere
+// values, which the feed must suppress.
+type prometheusStub struct {
+	URL  string
+	down atomic.Bool
+	hits atomic.Int64
+}
+
+func newPrometheusStub(t *testing.T) *prometheusStub {
+	t.Helper()
+	s := &prometheusStub{}
+	at := float64(time.Date(2026, 10, 23, 15, 0, 0, 0, time.UTC).Unix())
+	edge := map[string]string{"host": "edge", "instance": "127.0.0.1:9100"}
+	neko := map[string]string{"host": "neko-sphere", "instance": "neko-sphere.dwelf-hoki.ts.net:9100"}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/query", func(w http.ResponseWriter, r *http.Request) {
+		s.hits.Add(1)
+		if s.down.Load() {
+			http.Error(w, "down", http.StatusServiceUnavailable)
+			return
+		}
+		q := r.URL.Query().Get("query")
+		if !strings.Contains(q, `job="node"`) {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]any{"status": "error", "error": "unexpected job"})
+			return
+		}
+		var result []map[string]any
+		switch {
+		case strings.HasPrefix(q, "up{"):
+			result = []map[string]any{
+				{"metric": edge, "value": []any{at, "1"}},
+				{"metric": neko, "value": []any{at, "0"}},
+			}
+		case strings.Contains(q, "node_boot_time_seconds"):
+			result = []map[string]any{
+				{"metric": edge, "value": []any{at, strconv.FormatUint(12*86400+4*3600, 10)}},
+				{"metric": neko, "value": []any{at, strconv.FormatUint(3*3600, 10)}},
+			}
+		case strings.Contains(q, "node_cpu_seconds_total"):
+			result = []map[string]any{
+				{"metric": edge, "value": []any{at, "12.4"}},
+				{"metric": neko, "value": []any{at, "94.6"}},
+			}
+		case strings.Contains(q, "node_memory_MemAvailable_bytes"):
+			result = []map[string]any{
+				{"metric": edge, "value": []any{at, "38.2"}},
+				{"metric": neko, "value": []any{at, "91.0"}},
+			}
+		case strings.Contains(q, "node_filesystem_avail_bytes"):
+			result = []map[string]any{
+				{"metric": edge, "value": []any{at, "61.9"}},
+				{"metric": neko, "value": []any{at, "88.0"}},
+			}
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]any{"status": "error", "error": "unexpected query"})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": "success",
+			"data":   map[string]any{"resultType": "vector", "result": result},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	s.URL = srv.URL
+	return s
+}
+
 // syncBuffer collects child output while the process is still running.
 type syncBuffer struct {
 	mu sync.Mutex
@@ -132,7 +273,8 @@ func siteEnv() []string {
 	var env []string
 	for _, kv := range os.Environ() {
 		k, _, _ := strings.Cut(kv, "=")
-		if strings.HasPrefix(k, "MAGPIE_") || k == "LISTEN_ADDR" || k == "FEED_TTL" {
+		if strings.HasPrefix(k, "MAGPIE_") || strings.HasPrefix(k, "GATUS_") || strings.HasPrefix(k, "PROMETHEUS_") ||
+			k == "LISTEN_ADDR" || k == "FEED_TTL" {
 			continue
 		}
 		env = append(env, kv)
@@ -223,6 +365,25 @@ type statsResp struct {
 			Input []*int64 `json:"input"`
 		} `json:"daily"`
 	} `json:"tokens"`
+	Status *struct {
+		Uptime *struct {
+			Endpoints []struct {
+				Name      string   `json:"name"`
+				Group     string   `json:"group"`
+				Known     bool     `json:"known"`
+				Up        bool     `json:"up"`
+				Uptime24h *float64 `json:"uptime24h"`
+				Uptime7d  *float64 `json:"uptime7d"`
+			} `json:"endpoints"`
+		} `json:"uptime"`
+		Probes *struct {
+			Systems []struct {
+				Name   string   `json:"name"`
+				Status string   `json:"status"`
+				CPU    *float64 `json:"cpu"`
+			} `json:"systems"`
+		} `json:"probes"`
+	} `json:"status"`
 }
 
 func fetchStats(t *testing.T, base string) statsResp {
@@ -260,7 +421,7 @@ func TestWithoutMagpieServesProfileOnly(t *testing.T) {
 			t.Errorf("page missing %q", want)
 		}
 	}
-	for _, banned := range []string{`id="resources"`, `href="#resources"`} {
+	for _, banned := range []string{`id="resources"`, `href="#resources"`, `id="status"`, `href="#status"`} {
 		if strings.Contains(page, banned) {
 			t.Errorf("page without magpie contains %q", banned)
 		}
@@ -373,5 +534,126 @@ func TestMagpieURLWithoutKeyRefusesToStart(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "MAGPIE_WEB_KEY") {
 		t.Errorf("error should name MAGPIE_WEB_KEY; output:\n%s", out)
+	}
+}
+
+func TestGatusServesUptime(t *testing.T) {
+	stub := newGatusStub(t)
+	base := startSite(t, "GATUS_URL="+stub.URL)
+
+	stats := fetchStats(t, base)
+	if stats.Status == nil || stats.Status.Uptime == nil {
+		t.Fatal("gatus answering: status.uptime must be present")
+	}
+	eps := stats.Status.Uptime.Endpoints
+	if len(eps) != 3 {
+		t.Fatalf("endpoints = %d, want 3", len(eps))
+	}
+	byName := make(map[string]int, len(eps))
+	for i, e := range eps {
+		byName[e.Name] = i
+	}
+	if i, ok := byName["Gatus"]; !ok {
+		t.Fatal("Gatus endpoint missing")
+	} else if e := eps[i]; !e.Known || !e.Up || e.Uptime24h == nil || e.Uptime7d == nil ||
+		*e.Uptime24h < 99.989 || *e.Uptime24h > 99.991 || *e.Uptime7d < 99.899 || *e.Uptime7d > 99.901 {
+		t.Errorf("Gatus = %+v, want known up with 99.99%%/99.90%%", e)
+	}
+	if i, ok := byName["Paseo daemon"]; !ok {
+		t.Fatal("Paseo daemon endpoint missing")
+	} else if e := eps[i]; !e.Known || e.Up {
+		t.Errorf("Paseo daemon = %+v, want known down", e)
+	}
+	if stub.hits.Load() == 0 {
+		t.Error("gatus was never queried")
+	}
+
+	_, page := get(t, base+"/")
+	for _, want := range []string{`id="status"`, `href="#status"`, "99.99%", "Paseo daemon", "down", "12ms"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("page missing %q", want)
+		}
+	}
+	if strings.Contains(page, "endpoint not found") {
+		t.Error("page leaked a gatus error")
+	}
+}
+
+func TestPrometheusServesProbes(t *testing.T) {
+	stub := newPrometheusStub(t)
+	base := startSite(t, "PROMETHEUS_URL="+stub.URL)
+
+	stats := fetchStats(t, base)
+	if stats.Status == nil || stats.Status.Probes == nil {
+		t.Fatal("prometheus answering: status.probes must be present")
+	}
+	systems := stats.Status.Probes.Systems
+	if len(systems) != 2 {
+		t.Fatalf("systems = %d, want 2", len(systems))
+	}
+	if systems[0].Name != "edge" || systems[1].Name != "neko-sphere" {
+		t.Errorf("systems = %+v, want sorted edge then neko-sphere", systems)
+	}
+	if systems[0].Status != "up" || systems[0].CPU == nil || *systems[0].CPU < 12.39 || *systems[0].CPU > 12.41 {
+		t.Errorf("edge = %+v, want up with 12.4%% CPU", systems[0])
+	}
+	if systems[1].Status != "down" || systems[1].CPU != nil {
+		t.Errorf("neko-sphere = %+v, want down with no live metrics", systems[1])
+	}
+	if stub.hits.Load() == 0 {
+		t.Error("prometheus was never queried")
+	}
+
+	_, page := get(t, base+"/")
+	for _, want := range []string{`id="status"`, `href="#status"`, "neko-sphere", "12d 4h", "12%", "38%", "62%", "down"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("page missing %q", want)
+		}
+	}
+	for _, banned := range []string{"95%", "91%", "88%", "3h 0m"} {
+		if strings.Contains(page, banned) {
+			t.Errorf("page shows stale metric %q for a down target", banned)
+		}
+	}
+}
+
+func TestPrometheusErrorDegradesToNoProbes(t *testing.T) {
+	stub := newPrometheusStub(t)
+	stub.down.Store(true)
+	base := startSite(t, "PROMETHEUS_URL="+stub.URL, "FEED_TTL=1s")
+
+	if stats := fetchStats(t, base); stats.Status != nil {
+		t.Errorf("prometheus down: status = %+v, want null", stats.Status)
+	}
+	_, page := get(t, base+"/")
+	if strings.Contains(page, `id="status"`) {
+		t.Error("prometheus down: page must not render the Status panel")
+	}
+}
+
+func TestStatusLastGoodServedDuringOutage(t *testing.T) {
+	gatus := newGatusStub(t)
+	prometheus := newPrometheusStub(t)
+	base := startSite(t,
+		"GATUS_URL="+gatus.URL,
+		"PROMETHEUS_URL="+prometheus.URL,
+		"FEED_TTL=1s")
+
+	before := fetchStats(t, base)
+	if before.Status == nil || before.Status.Uptime == nil || before.Status.Probes == nil {
+		t.Fatal("first fetch: both status halves must be present")
+	}
+
+	gatus.down.Store(true)
+	prometheus.down.Store(true)
+	time.Sleep(1500 * time.Millisecond)
+
+	after := fetchStats(t, base)
+	if after.Status == nil || after.Status.Uptime == nil || after.Status.Probes == nil {
+		t.Fatalf("upstreams down within 10 min: last good status must still be served; got %+v", after.Status)
+	}
+	if len(after.Status.Uptime.Endpoints) != len(before.Status.Uptime.Endpoints) ||
+		len(after.Status.Probes.Systems) != len(before.Status.Probes.Systems) {
+		t.Errorf("stale status changed shape: before %+v after %+v", before.Status, after.Status)
 	}
 }

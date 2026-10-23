@@ -323,6 +323,24 @@ code, .mono { font-family: var(--cl-mono); font-size: 12px; }
 .readouts .big dd { font-size: 28px; color: var(--cl-link); }
 .ro-note { margin-top: 12px; padding-top: 8px; border-top: 1px dotted #d3d0cc; font-size: var(--cl-size-sm); color: var(--cl-muted); }
 
+/* Status panel: uptime checks and host probes */
+.mon > .frame + .frame { margin-top: 18px; }
+.table-scroll { overflow-x: auto; }
+.status-table { width: 100%; border-collapse: collapse; font-size: var(--cl-size-sm); background: var(--cl-base);
+  border: 1px solid var(--cl-sunken); box-shadow: inset 0 1px 1px rgba(0,0,0,.06); }
+.status-table th { padding: 5px 9px 6px; text-align: left; font-weight: normal; white-space: nowrap;
+  font-size: var(--cl-size-xs); letter-spacing: .14em; color: var(--cl-muted); border-bottom: 1px solid #c3c1be; }
+.status-table td { padding: 6px 9px; border-bottom: 1px dotted #d3d0cc; vertical-align: baseline; }
+.status-table tr:nth-child(even) td { background: var(--cl-stripe); }
+.status-table tr:last-child td { border-bottom: 0; }
+.status-table .sub { display: block; font-size: var(--cl-size-xs); color: var(--cl-muted); }
+.status-table .num { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.state { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.state::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #b8b5b1; border: 1px solid rgba(0,0,0,.28); }
+.state.up::before { background: #73d216; }
+.state.down::before { background: #ef2929; }
+.state.unknown::before { background: #edd400; }
+
 /* contribution-style heatmap: 16 weeks x 7 days, filled by JS column by column */
 .heat { display: grid; grid-auto-flow: column; grid-template-rows: 14px repeat(7, 13px); grid-template-columns: 30px; grid-auto-columns: 13px; gap: 3px; }
 .heat .dl, .heat .hm { font-size: var(--cl-size-xs); line-height: 13px; color: var(--cl-muted); white-space: nowrap; }
@@ -411,10 +429,10 @@ code, .mono { font-family: var(--cl-mono); font-size: 12px; }
 .no-js main:has(.mon:target) #profile { display: none; }
 .nojs-tabs { display: flex; align-items: flex-end; gap: 2px; }
 .nojs-tabs .ntab { text-decoration: none; }
-.nojs-tabs a[href="#profile"],
 main:not(:has(.mon:target)) .nojs-tabs a[href="#profile"],
-main:has(#resources:target) .nojs-tabs a[href="#resources"] {
+main:has(#resources:target) .nojs-tabs a[href="#resources"],
+main:has(#status:target) .nojs-tabs a[href="#status"] {
   height: 31px; background: var(--cl-base); border-bottom-color: var(--cl-base);
   box-shadow: var(--cl-tab-sel); z-index: 1;
 }
-main:has(#resources:target) .nojs-tabs a[href="#profile"] { height: 27px; background: var(--cl-tab); box-shadow: var(--cl-tab-hi); }
+main:has(.mon:target) .nojs-tabs a[href="#profile"] { height: 27px; background: var(--cl-tab); box-shadow: var(--cl-tab-hi); }
