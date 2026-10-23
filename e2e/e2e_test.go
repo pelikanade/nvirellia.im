@@ -112,7 +112,8 @@ func newMagpieStub(t *testing.T, key string, hours, days []series) *magpieStub {
 
 // gatusStub speaks gatus' status API. Every monitor reports 99.99% over 24h and
 // 99.90% over 7d; one key contains an apostrophe so uptime path escaping is
-// exercised. Setting down makes every request fail.
+// exercised. Gatus has 60 results, the oldest 10 failed, so the 50-check cap is
+// visible. Setting down makes every request fail.
 type gatusStub struct {
 	URL  string
 	down atomic.Bool
@@ -126,8 +127,12 @@ func newGatusStub(t *testing.T) *gatusStub {
 		name, group, key string
 		history          []bool
 	}
+	gatusHistory := make([]bool, 60)
+	for i := range gatusHistory {
+		gatusHistory[i] = i >= 10
+	}
 	endpoints := []endpoint{
-		{"Gatus", "Edge", "edge_gatus", []bool{true, true, true}},
+		{"Gatus", "Edge", "edge_gatus", gatusHistory},
 		{"Paseo daemon", "Neko Sphere", "neko-sphere_paseo-daemon", []bool{true, true, false}},
 		{"nuts.nvirellia.im", "Noa's IVs", "noa's-ivs_nuts-nvirellia-im", []bool{true, false, true}},
 	}
@@ -595,6 +600,8 @@ func TestGatusServesUptime(t *testing.T) {
 	} else if e := eps[i]; !e.Known || !e.Up || e.Uptime24h == nil || e.Uptime7d == nil ||
 		*e.Uptime24h < 99.989 || *e.Uptime24h > 99.991 || *e.Uptime7d < 99.899 || *e.Uptime7d > 99.901 {
 		t.Errorf("Gatus = %+v, want known up with 99.99%%/99.90%%", e)
+	} else if n := len(e.Results); n != 50 || !e.Results[0].Up {
+		t.Errorf("Gatus history = %d results starting up=%v, want the newest 50, all up", n, n > 0 && e.Results[0].Up)
 	}
 	if i, ok := byName["Paseo daemon"]; !ok {
 		t.Fatal("Paseo daemon endpoint missing")
@@ -609,9 +616,19 @@ func TestGatusServesUptime(t *testing.T) {
 
 	_, page := get(t, base+"/")
 	for _, want := range []string{`id="status"`, `href="#status"`, "99.99%", "Paseo daemon", "down", "12ms",
-		`class="useg up"`, `class="useg down"`, "2 of 3 checks up", "HTTP 503"} {
+		`class="useg up"`, `class="useg down"`, `class="useg none"`, "50 of 50 checks up", "2 of 3 checks up", "HTTP 503"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page missing %q", want)
+		}
+	}
+	// Every bar has 50 slots whatever the history length, so short histories pad instead of stretching.
+	bars := regexp.MustCompile(`(?s)<div class="ubar"[^>]*>(.*?)</div>`).FindAllStringSubmatch(page, -1)
+	if len(bars) != 3 {
+		t.Fatalf("uptime bars = %d, want 3", len(bars))
+	}
+	for _, b := range bars {
+		if n := strings.Count(b[1], `class="useg `); n != 50 {
+			t.Errorf("uptime bar has %d segments, want 50", n)
 		}
 	}
 	if strings.Contains(page, "endpoint not found") {
@@ -649,10 +666,14 @@ func TestPrometheusServesProbes(t *testing.T) {
 
 	_, page := get(t, base+"/")
 	for _, want := range []string{`id="status"`, `href="#status"`, "neko-sphere", "12d 4h", "12%", "38%", "62%", "down",
-		`class="sparkline"`, `class="spark-l cpu"`, `style="width: 12%"`, "no history"} {
+		`<li class="metric cpu">`, `style="width: 12.4%"`, "no history"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page missing %q", want)
 		}
+	}
+	// Only edge draws graphs: cpu, memory and disk. The down target gets none.
+	if n := strings.Count(page, `<svg class="sparkline"`); n != 3 {
+		t.Errorf("sparklines = %d, want 3 for edge and none for down neko-sphere", n)
 	}
 	for _, banned := range []string{"95%", "91%", "88%", "3h 0m"} {
 		if strings.Contains(page, banned) {

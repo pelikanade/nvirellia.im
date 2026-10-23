@@ -7,6 +7,7 @@ import (
 	"math"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pelikanade/nvirellia.im/internal/feed"
@@ -36,20 +37,51 @@ type statusView struct {
 	Probes *probeView
 }
 
+// uptimeSlots is the segment count of every uptime bar, matching the history
+// gatus returns. Short histories are padded on the oldest side, so bars line up
+// and a three-check monitor never stretches three segments across the row.
+const uptimeSlots = 50
+
 type uptimeView struct {
+	Summary   string // "3 monitors · 2 up · 1 down"
 	Endpoints []uptimeRow
 }
 
 type uptimeRow struct {
-	Name, Group, State, Uptime24h, Uptime7d, Last string
+	Name, Group, State  string
+	Uptime24h, Uptime7d string
+	Last, Latency       string // time and latency of the newest check
+	Oldest              string // time of the oldest check in the bar
+	Tally               string // "2 of 3 checks up"
+	BarLabel            string // the bar's accessible name
+	Slots               []checkSlot
+}
+
+// checkSlot is one bar segment: up, down, or none for padding before the
+// first recorded check. Title is its native tooltip.
+type checkSlot struct {
+	State, Title string
 }
 
 type probeView struct {
+	Summary string // "2 hosts · 1 up · 1 down"
+	Window  string // history span, "6h"
 	Systems []probeRow
 }
 
 type probeRow struct {
-	Name, Host, State, Uptime, CPU, Mem, Disk, Seen string
+	Name, Host, State, Uptime, Seen string
+	Metrics                         []metricView
+}
+
+// metricView is one host metric: its reading, a meter, and a sparkline. Fill,
+// Line and Area are empty when the target has no live value or history.
+type metricView struct {
+	Key, Label, Value string
+	Fill              string // meter width as a CSS percentage
+	Level             string // "", "warn" or "crit"
+	Line, Area        string // sparkline points in a sparkW x sparkH box
+	GraphLabel        string
 }
 
 // newPage derives everything the templates show from one feed snapshot.
@@ -125,8 +157,9 @@ func hourLabel(start time.Time, i int) string {
 	return fmt.Sprintf("%02d:00", (start.Hour()+i)%24)
 }
 
-// newStatusView formats gatus and beszel data for the Status panel. It returns
-// nil when neither source has anything to show, so the tab stays out of the page.
+// newStatusView formats gatus and Prometheus data for the Status panel. It
+// returns nil when neither source has anything to show, so the tab stays out of
+// the page.
 func newStatusView(s *feed.Status, loc *time.Location) *statusView {
 	if s == nil {
 		return nil
@@ -134,44 +167,52 @@ func newStatusView(s *feed.Status, loc *time.Location) *statusView {
 	v := &statusView{}
 	if s.Uptime != nil {
 		v.Uptime = &uptimeView{}
+		states := make([]string, 0, len(s.Uptime.Endpoints))
 		for _, e := range s.Uptime.Endpoints {
-			v.Uptime.Endpoints = append(v.Uptime.Endpoints, uptimeRow{
+			row := uptimeRow{
 				Name:      e.Name,
 				Group:     e.Group,
 				State:     endpointState(e),
 				Uptime24h: fmtPercent(e.Uptime24h),
 				Uptime7d:  fmtPercent(e.Uptime7d),
-				Last:      lastCheck(e, loc),
-			})
+				Last:      fmtClock(e.CheckedAt, loc),
+			}
+			if e.LatencyMS > 0 {
+				row.Latency = fmt.Sprintf("%dms", e.LatencyMS)
+			}
+			row.Slots, row.Tally, row.Oldest = uptimeBar(e.Results, loc)
+			row.BarLabel = row.Name + ", last checks: " + row.Tally
+			if row.Oldest != "—" {
+				row.BarLabel += ", " + row.Oldest + " to " + row.Last
+			}
+			states = append(states, row.State)
+			v.Uptime.Endpoints = append(v.Uptime.Endpoints, row)
 		}
+		v.Uptime.Summary = stateSummary(states, "monitor", "monitors")
 	}
 	if s.Probes != nil {
-		v.Probes = &probeView{}
+		v.Probes = &probeView{Window: fmt.Sprintf("%.0fh", feed.ProbeHistoryWindow.Hours())}
+		states := make([]string, 0, len(s.Probes.Systems))
 		for _, p := range s.Probes.Systems {
 			row := probeRow{
 				Name:   p.Name,
 				Host:   p.Host,
 				State:  probeState(p.Status),
 				Uptime: "—",
-				CPU:    "—",
-				Mem:    "—",
-				Disk:   "—",
-				Seen:   fmtSeen(p.Updated, loc),
+				Seen:   fmtClock(p.Updated, loc),
+				Metrics: []metricView{
+					newMetric("cpu", "cpu", p.CPU, p.CPUHistory, v.Probes.Window),
+					newMetric("mem", "memory", p.Mem, p.MemHistory, v.Probes.Window),
+					newMetric("disk", "disk", p.Disk, p.DiskHistory, v.Probes.Window),
+				},
 			}
 			if p.UptimeSeconds != nil {
 				row.Uptime = fmtDuration(*p.UptimeSeconds)
 			}
-			if p.CPU != nil {
-				row.CPU = fmtPercentValue(*p.CPU)
-			}
-			if p.Mem != nil {
-				row.Mem = fmtPercentValue(*p.Mem)
-			}
-			if p.Disk != nil {
-				row.Disk = fmtPercentValue(*p.Disk)
-			}
+			states = append(states, row.State)
 			v.Probes.Systems = append(v.Probes.Systems, row)
 		}
+		v.Probes.Summary = stateSummary(states, "host", "hosts")
 	}
 	if v.Uptime == nil && v.Probes == nil {
 		return nil
@@ -179,7 +220,121 @@ func newStatusView(s *feed.Status, loc *time.Location) *statusView {
 	return v
 }
 
-// endpointState is the gatus monitor state shown in the table.
+// stateSummary counts states for a frame caption: "3 monitors · 2 up · 1 down".
+func stateSummary(states []string, one, many string) string {
+	noun := many
+	if len(states) == 1 {
+		noun = one
+	}
+	parts := []string{fmt.Sprintf("%d %s", len(states), noun)}
+	for _, st := range []string{"up", "down", "unknown"} {
+		if n := countOf(states, st); n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", n, st))
+		}
+	}
+	return strings.Join(parts, " · ")
+}
+
+func countOf(states []string, want string) int {
+	n := 0
+	for _, s := range states {
+		if s == want {
+			n++
+		}
+	}
+	return n
+}
+
+// uptimeBar lays the newest uptimeSlots checks into a fixed-width bar, oldest
+// first, padding the oldest side with empty slots. It also returns the visible
+// tally and the oldest check's time.
+func uptimeBar(results []feed.Check, loc *time.Location) (slots []checkSlot, tally, oldest string) {
+	if len(results) > uptimeSlots {
+		results = results[len(results)-uptimeSlots:]
+	}
+	slots = make([]checkSlot, 0, uptimeSlots)
+	for range uptimeSlots - len(results) {
+		slots = append(slots, checkSlot{State: "none", Title: "no check recorded"})
+	}
+	up := 0
+	for _, c := range results {
+		st := "down"
+		if c.Up {
+			st = "up"
+			up++
+		}
+		slots = append(slots, checkSlot{State: st, Title: checkTitle(c, st, loc)})
+	}
+	if len(results) == 0 {
+		return slots, "no checks yet", "—"
+	}
+	return slots, fmt.Sprintf("%d of %d checks up", up, len(results)), fmtClock(results[0].At, loc)
+}
+
+// checkTitle is one segment's tooltip: "Oct 23 23:01 · down · HTTP 503 · 12ms".
+func checkTitle(c feed.Check, state string, loc *time.Location) string {
+	parts := []string{"time unknown", state}
+	if t, err := time.Parse(time.RFC3339, c.At); err == nil {
+		parts[0] = t.In(loc).Format("Jan 2 15:04:05")
+	}
+	if c.Status > 0 {
+		parts = append(parts, fmt.Sprintf("HTTP %d", c.Status))
+	}
+	if c.LatencyMS > 0 {
+		parts = append(parts, fmt.Sprintf("%dms", c.LatencyMS))
+	}
+	return strings.Join(parts, " · ")
+}
+
+// Sparkline box: the viewBox of every metric graph. The vertical scale is a
+// fixed 0..100%, like a load applet, so hosts and metrics compare at a glance.
+const sparkW, sparkH = 120, 30
+
+// newMetric formats one host metric. A nil value or empty history renders as
+// a dash and an empty graph, never as stale numbers.
+func newMetric(key, label string, v *float64, history []float64, window string) metricView {
+	m := metricView{Key: key, Label: label, Value: "—"}
+	if v != nil {
+		pct := min(max(*v, 0), 100)
+		m.Value = fmtPercentValue(pct)
+		m.Fill = strconv.FormatFloat(pct, 'f', 1, 64) + "%"
+		switch {
+		case pct >= 90:
+			m.Level = "crit"
+		case pct >= 75:
+			m.Level = "warn"
+		}
+	}
+	if len(history) == 0 {
+		m.GraphLabel = label + ": no history"
+		return m
+	}
+	m.Line, m.Area = sparkline(history)
+	m.GraphLabel = fmt.Sprintf("%s, last %s: now %s, low %s, high %s", label, window,
+		m.Value, fmtPercentValue(slices.Min(history)), fmtPercentValue(slices.Max(history)))
+	return m
+}
+
+// sparkline maps percentage samples, oldest first, to a polyline and its
+// filled area. A single sample draws a flat line.
+func sparkline(values []float64) (line, area string) {
+	if len(values) == 1 {
+		values = []float64{values[0], values[0]}
+	}
+	var b strings.Builder
+	for i, v := range values {
+		x := float64(i) / float64(len(values)-1) * sparkW
+		y := sparkH - 1 - min(max(v, 0), 100)/100*(sparkH-2)
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		fmt.Fprintf(&b, "%.1f,%.1f", x, y)
+	}
+	line = b.String()
+	return line, fmt.Sprintf("0,%d %s %d,%d", sparkH, line, sparkW, sparkH)
+}
+
+// endpointState is the gatus monitor state shown on the Status row.
 func endpointState(e feed.Endpoint) string {
 	switch {
 	case !e.Known:
@@ -209,7 +364,7 @@ func fmtPercent(p *float64) string {
 	return fmt.Sprintf("%.2f%%", *p)
 }
 
-// fmtPercentValue renders a beszel percentage.
+// fmtPercentValue renders a Prometheus percentage.
 func fmtPercentValue(v float64) string {
 	return fmt.Sprintf("%.0f%%", v)
 }
@@ -230,24 +385,8 @@ func fmtDuration(sec uint64) string {
 	}
 }
 
-// lastCheck is the gatus result time in the feed zone, with its latency.
-func lastCheck(e feed.Endpoint, loc *time.Location) string {
-	if e.CheckedAt == "" {
-		return "—"
-	}
-	t, err := time.Parse(time.RFC3339, e.CheckedAt)
-	if err != nil {
-		return "—"
-	}
-	s := t.In(loc).Format("15:04")
-	if e.LatencyMS > 0 {
-		s += fmt.Sprintf(" · %dms", e.LatencyMS)
-	}
-	return s
-}
-
-// fmtSeen is a beszel record's last update time in the feed zone.
-func fmtSeen(s string, loc *time.Location) string {
+// fmtClock is an RFC 3339 instant as "15:04" in the feed zone.
+func fmtClock(s string, loc *time.Location) string {
 	if s == "" {
 		return "—"
 	}
