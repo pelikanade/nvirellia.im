@@ -7,43 +7,41 @@
 {{with .Status.Uptime}}
   <section class="frame" aria-labelledby="h-uptime">
     <h3 class="legend" id="h-uptime">{{icon "i-pulse"}}Uptime</h3>
-    <div class="uptime-list">
-{{range .Endpoints}}      <article class="uptime-row">
-        <div class="uptime-head">
-          <span class="state {{.State}}">{{.State}}</span>
-          <span class="uptime-id"><b>{{.Name}}</b><span class="sub">{{.Group}}</span></span>
-          <span class="uptime-pcts">
-            <span><span class="lbl-sm">24h</span><b>{{.Uptime24h}}</b></span>
-            <span><span class="lbl-sm">7d</span><b>{{.Uptime7d}}</b></span>
-          </span>
-        </div>
-        <div class="ubar" role="img" aria-label="{{.BarLabel}}">
-{{range .Checks}}          <span class="useg {{.State}}" title="{{.Title}}"></span>
-{{end}}        </div>
-        <div class="ubar-foot"><span>{{.Oldest}}</span><span>last {{.Last}}</span></div>
-      </article>
-{{end}}    </div>
+    <div class="table-scroll">
+      <table class="status-table">
+        <thead><tr><th scope="col">check</th><th scope="col">state</th><th scope="col">24h</th><th scope="col">7d</th><th scope="col">last</th></tr></thead>
+        <tbody>
+{{range .Endpoints}}          <tr>
+            <td><b>{{.Name}}</b><span class="sub">{{.Group}}</span></td>
+            <td><span class="state {{.State}}">{{.State}}</span></td>
+            <td class="num">{{.Uptime24h}}</td>
+            <td class="num">{{.Uptime7d}}</td>
+            <td class="num">{{.Last}}</td>
+          </tr>
+{{end}}        </tbody>
+      </table>
+    </div>
   </section>
 {{end}}
 {{with .Status.Probes}}
   <section class="frame" aria-labelledby="h-probes">
     <h3 class="legend" id="h-probes">{{icon "i-pulse"}}Probes</h3>
-    <div class="probes-grid">
-{{range .Systems}}      <article class="probe">
-        <div class="probe-head">
-          <span class="state {{.State}}">{{.State}}</span>
-          <span class="probe-id"><b>{{.Name}}</b>{{if .Host}}<span class="sub">{{.Host}}</span>{{end}}</span>
-        </div>
-        <div class="probe-meta">{{if .Uptime}}<span>up {{.Uptime}}</span>{{end}}<span>seen {{.Seen}}</span></div>
-        <div class="metrics">
-{{range .Metrics}}          <div class="metric {{.Class}}">
-            <div class="mhead"><span>{{.Label}}</span><b>{{.Value}}</b></div>
-            {{if .Points}}<svg class="sparkline" viewBox="0 0 100 24" preserveAspectRatio="none" role="img" aria-label="{{.Aria}}"><polygon class="spark-a {{.Class}}" points="{{.Area}}"/><polyline class="spark-l {{.Class}}" points="{{.Points}}"/></svg>{{else}}<span class="spark-empty">no history</span>{{end}}
-            {{if .Width}}<span class="meter"><span class="fill {{.Class}}" style="width: {{.Width}}%"></span></span>{{else}}<span class="meter empty"></span>{{end}}
-          </div>
-{{end}}        </div>
-      </article>
-{{end}}    </div>
+    <div class="table-scroll">
+      <table class="status-table">
+        <thead><tr><th scope="col">host</th><th scope="col">state</th><th scope="col">up for</th><th scope="col">cpu</th><th scope="col">memory</th><th scope="col">disk</th><th scope="col">seen</th></tr></thead>
+        <tbody>
+{{range .Systems}}          <tr>
+            <td><b>{{.Name}}</b>{{if .Host}}<span class="sub">{{.Host}}</span>{{end}}</td>
+            <td><span class="state {{.State}}">{{.State}}</span></td>
+            <td class="num">{{.Uptime}}</td>
+            <td class="num">{{.CPU}}</td>
+            <td class="num">{{.Mem}}</td>
+            <td class="num">{{.Disk}}</td>
+            <td class="num">{{.Seen}}</td>
+          </tr>
+{{end}}        </tbody>
+      </table>
+    </div>
   </section>
 {{end}}
 </section>

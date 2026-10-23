@@ -7,7 +7,6 @@ import (
 	"math"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/pelikanade/nvirellia.im/internal/feed"
@@ -41,15 +40,8 @@ type uptimeView struct {
 	Endpoints []uptimeRow
 }
 
-const uptimeBarSegments = 50
-
 type uptimeRow struct {
-	Name, Group, State, Uptime24h, Uptime7d, Last, Oldest, BarLabel string
-	Checks                                                          []checkView
-}
-
-type checkView struct {
-	State, Title string
+	Name, Group, State, Uptime24h, Uptime7d, Last string
 }
 
 type probeView struct {
@@ -57,14 +49,7 @@ type probeView struct {
 }
 
 type probeRow struct {
-	Name, Host, State, Uptime, Seen string
-	Metrics                         []metricView
-}
-
-// metricView is one host metric: its current value, a 0..100 meter width, and
-// the SVG points for its history sparkline.
-type metricView struct {
-	Class, Label, Value, Width, Points, Area, Aria string
+	Name, Host, State, Uptime, CPU, Mem, Disk, Seen string
 }
 
 // newPage derives everything the templates show from one feed snapshot.
@@ -140,9 +125,8 @@ func hourLabel(start time.Time, i int) string {
 	return fmt.Sprintf("%02d:00", (start.Hour()+i)%24)
 }
 
-// newStatusView formats gatus and Prometheus data for the Status panel. It
-// returns nil when neither source has anything to show, so the tab stays out of
-// the page.
+// newStatusView formats gatus and beszel data for the Status panel. It returns
+// nil when neither source has anything to show, so the tab stays out of the page.
 func newStatusView(s *feed.Status, loc *time.Location) *statusView {
 	if s == nil {
 		return nil
@@ -151,7 +135,6 @@ func newStatusView(s *feed.Status, loc *time.Location) *statusView {
 	if s.Uptime != nil {
 		v.Uptime = &uptimeView{}
 		for _, e := range s.Uptime.Endpoints {
-			checks, label, oldest := uptimeBar(e, loc)
 			v.Uptime.Endpoints = append(v.Uptime.Endpoints, uptimeRow{
 				Name:      e.Name,
 				Group:     e.Group,
@@ -159,9 +142,6 @@ func newStatusView(s *feed.Status, loc *time.Location) *statusView {
 				Uptime24h: fmtPercent(e.Uptime24h),
 				Uptime7d:  fmtPercent(e.Uptime7d),
 				Last:      lastCheck(e, loc),
-				Oldest:    oldest,
-				BarLabel:  label,
-				Checks:    checks,
 			})
 		}
 	}
@@ -169,18 +149,26 @@ func newStatusView(s *feed.Status, loc *time.Location) *statusView {
 		v.Probes = &probeView{}
 		for _, p := range s.Probes.Systems {
 			row := probeRow{
-				Name:  p.Name,
-				Host:  p.Host,
-				State: probeState(p.Status),
-				Seen:  fmtSeen(p.Updated, loc),
-				Metrics: []metricView{
-					newMetric("cpu", "cpu", p.CPU, p.CPUHistory),
-					newMetric("mem", "memory", p.Mem, p.MemHistory),
-					newMetric("disk", "disk", p.Disk, p.DiskHistory),
-				},
+				Name:   p.Name,
+				Host:   p.Host,
+				State:  probeState(p.Status),
+				Uptime: "—",
+				CPU:    "—",
+				Mem:    "—",
+				Disk:   "—",
+				Seen:   fmtSeen(p.Updated, loc),
 			}
 			if p.UptimeSeconds != nil {
 				row.Uptime = fmtDuration(*p.UptimeSeconds)
+			}
+			if p.CPU != nil {
+				row.CPU = fmtPercentValue(*p.CPU)
+			}
+			if p.Mem != nil {
+				row.Mem = fmtPercentValue(*p.Mem)
+			}
+			if p.Disk != nil {
+				row.Disk = fmtPercentValue(*p.Disk)
 			}
 			v.Probes.Systems = append(v.Probes.Systems, row)
 		}
@@ -191,107 +179,7 @@ func newStatusView(s *feed.Status, loc *time.Location) *statusView {
 	return v
 }
 
-// uptimeBar turns the recent Gatus results into one segment per check, padding
-// short histories with unknown segments so every row has the same width.
-func uptimeBar(e feed.Endpoint, loc *time.Location) (checks []checkView, label, oldest string) {
-	results := e.Results
-	if len(results) > uptimeBarSegments {
-		results = results[len(results)-uptimeBarSegments:]
-	}
-	checks = make([]checkView, 0, uptimeBarSegments)
-	for i := len(results); i < uptimeBarSegments; i++ {
-		checks = append(checks, checkView{State: "unknown", Title: "no check"})
-	}
-	up := 0
-	for _, r := range results {
-		state := "down"
-		if r.Up {
-			state, up = "up", up+1
-		}
-		checks = append(checks, checkView{State: state, Title: checkTitle(r, loc)})
-	}
-	oldest = "—"
-	if len(results) > 0 {
-		oldest = checkTime(results[0].At, loc)
-		label = fmt.Sprintf("%d of %d checks up", up, len(results))
-	} else {
-		label = "no checks yet"
-	}
-	return checks, label, oldest
-}
-
-// checkTitle is the native tooltip for one bar segment.
-func checkTitle(c feed.Check, loc *time.Location) string {
-	parts := []string{checkTime(c.At, loc)}
-	if c.Up {
-		parts = append(parts, "up")
-	} else {
-		parts = append(parts, "down")
-	}
-	if c.Status > 0 {
-		parts = append(parts, fmt.Sprintf("HTTP %d", c.Status))
-	}
-	if c.LatencyMS > 0 {
-		parts = append(parts, fmt.Sprintf("%dms", c.LatencyMS))
-	}
-	return strings.Join(parts, " · ")
-}
-
-// checkTime formats a check timestamp in the feed zone.
-func checkTime(s string, loc *time.Location) string {
-	if s == "" {
-		return "—"
-	}
-	t, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		return "—"
-	}
-	return t.In(loc).Format("15:04")
-}
-
-// newMetric formats one host metric and, when enough samples exist, its
-// sparkline.
-func newMetric(class, label string, v *float64, history []float64) metricView {
-	m := metricView{Class: class, Label: label, Value: "—"}
-	if v != nil {
-		m.Value = fmtPercentValue(*v)
-		m.Width = fmt.Sprintf("%.0f", *v)
-	}
-	if len(history) >= 2 {
-		m.Points, m.Area = sparkline(history)
-		lo, hi := slices.Min(history), slices.Max(history)
-		m.Aria = fmt.Sprintf("%s over the last %d hours: now %s, low %.0f%%, high %.0f%%",
-			label, int(feed.ProbeHistoryWindow.Hours()), m.Value, lo, hi)
-	}
-	return m
-}
-
-// sparkline maps percentages to an SVG polyline and its filled area. The
-// vertical scale follows the series, with a ten-point floor, so a quiet CPU
-// still shows its shape instead of hugging the baseline.
-func sparkline(values []float64) (points, area string) {
-	if len(values) < 2 {
-		return "", ""
-	}
-	lo, hi := slices.Min(values), slices.Max(values)
-	if hi-lo < 10 {
-		mid := (lo + hi) / 2
-		lo, hi = max(0, mid-5), min(100, mid+5)
-		if hi <= lo {
-			hi = lo + 1
-		}
-	}
-	var b strings.Builder
-	for i, v := range values {
-		x := float64(i) / float64(len(values)-1) * 100
-		y := 22 - (v-lo)/(hi-lo)*20
-		fmt.Fprintf(&b, "%.1f,%.1f ", x, y)
-	}
-	points = strings.TrimSpace(b.String())
-	return points, "0,24 " + points + " 100,24"
-}
-
-// endpointState is the gatus monitor state shown on the Status row.
+// endpointState is the gatus monitor state shown in the table.
 func endpointState(e feed.Endpoint) string {
 	switch {
 	case !e.Known:
@@ -321,7 +209,7 @@ func fmtPercent(p *float64) string {
 	return fmt.Sprintf("%.2f%%", *p)
 }
 
-// fmtPercentValue renders a Prometheus percentage.
+// fmtPercentValue renders a beszel percentage.
 func fmtPercentValue(v float64) string {
 	return fmt.Sprintf("%.0f%%", v)
 }
