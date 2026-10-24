@@ -17,11 +17,11 @@
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
-          nvirellia = pkgs.buildGoModule {
-            pname = "nvirellia";
+          nvirellia-im = pkgs.buildGoModule {
+            pname = "nvirellia-im";
             version = "0-unstable-${self.shortRev or self.dirtyShortRev or "unknown"}";
             src = self;
-            subPackages = [ "cmd/nvirellia" ];
+            subPackages = [ "cmd/nvirellia-im" ];
             vendorHash = null;
             ldflags = [
               "-s"
@@ -29,13 +29,13 @@
             ];
             meta = {
               description = "nvirellia.im profile sheet";
-              mainProgram = "nvirellia";
+              mainProgram = "nvirellia-im";
             };
           };
         in
         {
-          default = nvirellia;
-          inherit nvirellia;
+          default = nvirellia-im;
+          inherit nvirellia-im;
         }
       );
 

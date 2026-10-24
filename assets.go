@@ -1,5 +1,5 @@
-// Package nvirellia embeds the site's templates and static assets.
-package nvirellia
+// Package nvirelliaim embeds the site's templates and static assets.
+package nvirelliaim
 
 import "embed"
 

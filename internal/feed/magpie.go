@@ -133,7 +133,7 @@ func getJSON(ctx context.Context, client *http.Client, target, name string, out 
 		return fmt.Errorf("%s: %w", name, err)
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "nvirellia")
+	req.Header.Set("User-Agent", "nvirellia-im")
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("%s: request failed: %w", name, errorWithoutURL(err))

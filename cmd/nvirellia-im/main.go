@@ -1,4 +1,4 @@
-// Command nvirellia serves nvirellia.im.
+// Command nvirellia-im serves nvirellia.im.
 package main
 
 import (

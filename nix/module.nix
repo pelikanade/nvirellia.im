@@ -30,8 +30,8 @@ in
     package = mkOption {
       type = types.package;
       default = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
-      defaultText = lib.literalExpression "inputs.nvirellia.packages.${pkgs.stdenv.hostPlatform.system}.default";
-      description = "The nvirellia package to use.";
+      defaultText = lib.literalExpression "inputs.nvirellia-im.packages.${pkgs.stdenv.hostPlatform.system}.default";
+      description = "The nvirellia-im package to use.";
     };
 
     listenAddress = mkOption {
@@ -171,7 +171,7 @@ in
       };
 
       serviceConfig = {
-        ExecStart = "${cfg.package}/bin/nvirellia";
+        ExecStart = "${cfg.package}/bin/nvirellia-im";
         EnvironmentFile = optional (cfg.magpie.keyFile != null) cfg.magpie.keyFile;
 
         DynamicUser = true;

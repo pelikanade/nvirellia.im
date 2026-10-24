@@ -20,7 +20,7 @@ import (
 //	GET <base>/api/v1/endpoints/<key>/uptimes/7d
 //
 // The routes are unprotected unless the instance configures security, which the
-// nvirellia deployment does not. Uptime calls are best effort: a failed window
+// nvirellia-im deployment does not. Uptime calls are best effort: a failed window
 // leaves that percentage nil while the monitor itself still renders.
 type Gatus struct {
 	baseURL string

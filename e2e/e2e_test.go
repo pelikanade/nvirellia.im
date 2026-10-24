@@ -1,4 +1,4 @@
-// Package e2e builds the nvirellia binary, runs it against a stub magpie, and
+// Package e2e builds the nvirellia-im binary, runs it against a stub magpie, and
 // checks what visitors and the feed API see over HTTP.
 package e2e
 
@@ -33,13 +33,13 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "nvirellia-e2e-")
+	dir, err := os.MkdirTemp("", "nvirellia-im-e2e-")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	binPath = filepath.Join(dir, "nvirellia")
-	build := exec.Command("go", "build", "-o", binPath, "./cmd/nvirellia")
+	binPath = filepath.Join(dir, "nvirellia-im")
+	build := exec.Command("go", "build", "-o", binPath, "./cmd/nvirellia-im")
 	build.Dir = ".."
 	if out, err := build.CombinedOutput(); err != nil {
 		fmt.Fprintf(os.Stderr, "build failed: %v\n%s", err, out)
