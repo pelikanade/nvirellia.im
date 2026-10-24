@@ -2,7 +2,7 @@
 <section id="status" class="mon tabpanel" role="tabpanel" aria-labelledby="tab-status">
   <div class="mon-head">
     <h2>Status</h2>
-    <span class="aside">uptime checks via gatus, host probes via prometheus; times in UTC+8</span>
+    <span class="aside">uptime checks via gatus, host probes via prometheus; versions against flake main; times in UTC+8</span>
   </div>
 {{with .Status.Uptime}}
   <section class="frame" aria-labelledby="h-uptime">
@@ -49,6 +49,8 @@
         <dl class="host-facts">
           <div><dt>up for</dt><dd>{{.Uptime}}</dd></div>
           <div><dt>seen</dt><dd>{{.Seen}}</dd></div>
+          <div class="ver"><dt>version</dt><dd><span class="mono"{{with .VersionFull}} title="{{.}}"{{end}}>{{.Version}}</span>{{if .VersionLabel}} <span class="vtag {{.VersionState}}">{{.VersionLabel}}</span>{{end}}</dd></div>
+          <div class="moment"><dt>last update</dt><dd>{{.Updated}}</dd></div>
         </dl>
 {{if ne .State "up"}}        <p class="host-note">not answering scrapes; live metrics withheld</p>
 {{end}}        <ul class="metrics">

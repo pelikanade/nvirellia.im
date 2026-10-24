@@ -111,6 +111,17 @@ in
           targets should carry a `host` label with the display name.
         '';
       };
+
+      flakeRepository = mkOption {
+        type = types.str;
+        default = "pelikanade/flake";
+        example = "pelikanade/flake";
+        description = ''
+          GitHub repository (`owner/repo`) whose `main` head marks a host's
+          revision up to date (`FLAKE_REPO`). Only used when
+          {option}`services.nvirellia-im.prometheus.url` is set.
+        '';
+      };
     };
 
     openFirewall = mkEnableOption "opening the configured port in the firewall";
@@ -129,6 +140,10 @@ in
       {
         assertion = cfg.prometheus.url == null || cfg.prometheus.job != "";
         message = "services.nvirellia-im.prometheus.job must not be empty.";
+      }
+      {
+        assertion = cfg.prometheus.url == null || cfg.prometheus.flakeRepository != "";
+        message = "services.nvirellia-im.prometheus.flakeRepository must not be empty.";
       }
     ];
 
@@ -152,6 +167,7 @@ in
       // optionalAttrs (cfg.prometheus.url != null) {
         PROMETHEUS_URL = cfg.prometheus.url;
         PROMETHEUS_JOB = cfg.prometheus.job;
+        FLAKE_REPO = cfg.prometheus.flakeRepository;
       };
 
       serviceConfig = {

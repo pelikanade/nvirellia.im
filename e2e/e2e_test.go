@@ -25,6 +25,11 @@ import (
 var (
 	binPath string
 	cst     = time.FixedZone("UTC+8", 8*3600)
+
+	// Revisions the probe and GitHub stubs agree on. The old revision is a
+	// clean commit, so a host on it renders "outdated" rather than "modified".
+	latestRev = "abcdef1" + strings.Repeat("0", 33)
+	oldRev    = "1234567" + strings.Repeat("0", 33)
 )
 
 func TestMain(m *testing.M) {
@@ -192,9 +197,10 @@ func newGatusStub(t *testing.T) *gatusStub {
 	return s
 }
 
-// prometheusStub answers /api/v1/query. Two node targets are scraped: edge is
-// up, neko-sphere is down; the metric queries still carry stale neko-sphere
-// values, which the feed must suppress.
+// prometheusStub answers /api/v1/query. Three node targets are scraped: edge
+// and asymmetry are up, neko-sphere is down; the metric queries still carry
+// stale neko-sphere values, which the feed must suppress. edge runs latestRev,
+// asymmetry runs oldRev, and neko-sphere has no revision because it is down.
 type prometheusStub struct {
 	URL  string
 	down atomic.Bool
@@ -206,7 +212,16 @@ func newPrometheusStub(t *testing.T) *prometheusStub {
 	s := &prometheusStub{}
 	at := float64(time.Date(2026, 10, 23, 15, 0, 0, 0, time.UTC).Unix())
 	edge := map[string]string{"host": "edge", "instance": "127.0.0.1:9100"}
+	asymmetry := map[string]string{"host": "asymmetry", "instance": "asymmetry.dwelf-hoki.ts.net:9100"}
 	neko := map[string]string{"host": "neko-sphere", "instance": "neko-sphere.dwelf-hoki.ts.net:9100"}
+	withRevision := func(base map[string]string, revision string) map[string]string {
+		out := make(map[string]string, len(base)+1)
+		for k, v := range base {
+			out[k] = v
+		}
+		out["revision"] = revision
+		return out
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/query", func(w http.ResponseWriter, r *http.Request) {
 		s.hits.Add(1)
@@ -225,12 +240,26 @@ func newPrometheusStub(t *testing.T) *prometheusStub {
 		case strings.HasPrefix(q, "up{"):
 			result = []map[string]any{
 				{"metric": edge, "value": []any{at, "1"}},
+				{"metric": asymmetry, "value": []any{at, "1"}},
 				{"metric": neko, "value": []any{at, "0"}},
 			}
 		case strings.Contains(q, "node_boot_time_seconds"):
 			result = []map[string]any{
 				{"metric": edge, "value": []any{at, strconv.FormatUint(12*86400+4*3600, 10)}},
+				{"metric": asymmetry, "value": []any{at, strconv.FormatUint(4*3600+20*60, 10)}},
 				{"metric": neko, "value": []any{at, strconv.FormatUint(3*3600, 10)}},
+			}
+		case strings.Contains(q, "nixos_flake_info"):
+			result = []map[string]any{
+				{"metric": withRevision(edge, latestRev), "value": []any{at, "1"}},
+				{"metric": withRevision(asymmetry, oldRev), "value": []any{at, "1"}},
+				{"metric": withRevision(neko, oldRev), "value": []any{at, "1"}},
+			}
+		case strings.Contains(q, "nixos_system_update_time_seconds"):
+			result = []map[string]any{
+				{"metric": edge, "value": []any{at, strconv.FormatInt(int64(at)-3600, 10)}},
+				{"metric": asymmetry, "value": []any{at, strconv.FormatInt(int64(at)-7200, 10)}},
+				{"metric": neko, "value": []any{at, strconv.FormatInt(int64(at)-86400, 10)}},
 			}
 		default:
 			w.WriteHeader(http.StatusBadRequest)
@@ -287,6 +316,34 @@ func newPrometheusStub(t *testing.T) *prometheusStub {
 	return s
 }
 
+// githubStub answers the public commit lookup for pelikanade/flake's main.
+// Setting down makes every request fail, leaving up-to-date unknown.
+type githubStub struct {
+	URL  string
+	sha  string
+	down atomic.Bool
+	hits atomic.Int64
+}
+
+func newGitHubStub(t *testing.T, sha string) *githubStub {
+	t.Helper()
+	s := &githubStub{sha: sha}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /repos/pelikanade/flake/commits/main", func(w http.ResponseWriter, _ *http.Request) {
+		s.hits.Add(1)
+		if s.down.Load() {
+			http.Error(w, "down", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"sha": s.sha})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	s.URL = srv.URL
+	return s
+}
+
 // syncBuffer collects child output while the process is still running.
 type syncBuffer struct {
 	mu sync.Mutex
@@ -311,7 +368,7 @@ func siteEnv() []string {
 	for _, kv := range os.Environ() {
 		k, _, _ := strings.Cut(kv, "=")
 		if strings.HasPrefix(k, "MAGPIE_") || strings.HasPrefix(k, "GATUS_") || strings.HasPrefix(k, "PROMETHEUS_") ||
-			k == "LISTEN_ADDR" || k == "FEED_TTL" {
+			strings.HasPrefix(k, "GITHUB_") || k == "FLAKE_REPO" || k == "LISTEN_ADDR" || k == "FEED_TTL" {
 			continue
 		}
 		env = append(env, kv)
@@ -421,6 +478,9 @@ type statsResp struct {
 			Systems []struct {
 				Name       string    `json:"name"`
 				Status     string    `json:"status"`
+				Revision   string    `json:"revision"`
+				UpdatedAt  string    `json:"updatedAt"`
+				UpToDate   *bool     `json:"upToDate"`
 				CPU        *float64  `json:"cpu"`
 				CPUHistory []float64 `json:"cpuHistory"`
 			} `json:"systems"`
@@ -638,42 +698,64 @@ func TestGatusServesUptime(t *testing.T) {
 
 func TestPrometheusServesProbes(t *testing.T) {
 	stub := newPrometheusStub(t)
-	base := startSite(t, "PROMETHEUS_URL="+stub.URL)
+	github := newGitHubStub(t, latestRev)
+	base := startSite(t, "PROMETHEUS_URL="+stub.URL, "GITHUB_API_URL="+github.URL)
 
 	stats := fetchStats(t, base)
 	if stats.Status == nil || stats.Status.Probes == nil {
 		t.Fatal("prometheus answering: status.probes must be present")
 	}
 	systems := stats.Status.Probes.Systems
-	if len(systems) != 2 {
-		t.Fatalf("systems = %d, want 2", len(systems))
+	if len(systems) != 3 {
+		t.Fatalf("systems = %d, want 3", len(systems))
 	}
-	if systems[0].Name != "edge" || systems[1].Name != "neko-sphere" {
-		t.Errorf("systems = %+v, want sorted edge then neko-sphere", systems)
+	if systems[0].Name != "asymmetry" || systems[1].Name != "edge" || systems[2].Name != "neko-sphere" {
+		t.Errorf("systems = %+v, want sorted asymmetry, edge, neko-sphere", systems)
 	}
-	if systems[0].Status != "up" || systems[0].CPU == nil || *systems[0].CPU < 12.39 || *systems[0].CPU > 12.41 {
-		t.Errorf("edge = %+v, want up with 12.4%% CPU", systems[0])
+	byName := make(map[string]int, len(systems))
+	for i, s := range systems {
+		byName[s.Name] = i
 	}
-	if systems[1].Status != "down" || systems[1].CPU != nil || len(systems[1].CPUHistory) != 0 {
-		t.Errorf("neko-sphere = %+v, want down with no live metrics", systems[1])
+	edge := systems[byName["edge"]]
+	if edge.Status != "up" || edge.CPU == nil || *edge.CPU < 12.39 || *edge.CPU > 12.41 {
+		t.Errorf("edge = %+v, want up with 12.4%% CPU", edge)
 	}
-	if n := len(systems[0].CPUHistory); n != 3 || systems[0].CPUHistory[n-1] < 12.39 {
-		t.Errorf("edge CPU history = %+v, want 3 samples ending at 12.4", systems[0].CPUHistory)
+	if edge.Revision != latestRev || edge.UpdatedAt != "2026-10-23T14:00:00Z" || edge.UpToDate == nil || !*edge.UpToDate {
+		t.Errorf("edge = %+v, want latest revision activated at 14:00 UTC", edge)
+	}
+	if n := len(edge.CPUHistory); n != 3 || edge.CPUHistory[n-1] < 12.39 {
+		t.Errorf("edge CPU history = %+v, want 3 samples ending at 12.4", edge.CPUHistory)
+	}
+	asymmetry := systems[byName["asymmetry"]]
+	if asymmetry.Status != "up" || asymmetry.CPU != nil || asymmetry.Revision != oldRev ||
+		asymmetry.UpdatedAt != "2026-10-23T13:00:00Z" ||
+		asymmetry.UpToDate == nil || *asymmetry.UpToDate {
+		t.Errorf("asymmetry = %+v, want up on the old revision at 13:00 UTC", asymmetry)
+	}
+	neko := systems[byName["neko-sphere"]]
+	if neko.Status != "down" || neko.CPU != nil || len(neko.CPUHistory) != 0 ||
+		neko.Revision != "" || neko.UpdatedAt != "" || neko.UpToDate != nil {
+		t.Errorf("neko-sphere = %+v, want down with no live or version metrics", neko)
 	}
 	if stub.hits.Load() == 0 {
 		t.Error("prometheus was never queried")
 	}
+	if github.hits.Load() == 0 {
+		t.Error("github was never queried")
+	}
 
 	_, page := get(t, base+"/")
-	for _, want := range []string{`id="status"`, `href="#status"`, "neko-sphere", "12d 4h", "12%", "38%", "62%", "down",
+	for _, want := range []string{`id="status"`, `href="#status"`, "neko-sphere", "12d 4h", "4h 20m", "12%", "38%", "62%", "down",
+		"version", "last update", "abcdef1", "1234567", "2026-10-23 22:00", "2026-10-23 21:00",
+		`class="vtag up-to-date"`, `class="vtag outdated"`,
 		`<li class="metric cpu">`, `style="width: 12.4%"`, "no history"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page missing %q", want)
 		}
 	}
-	// Only edge draws graphs: cpu, memory and disk. The down target gets none.
+	// Only edge draws graphs: cpu, memory and disk. The other targets get none.
 	if n := strings.Count(page, `<svg class="sparkline"`); n != 3 {
-		t.Errorf("sparklines = %d, want 3 for edge and none for down neko-sphere", n)
+		t.Errorf("sparklines = %d, want 3 for edge and none for the others", n)
 	}
 	for _, banned := range []string{"95%", "91%", "88%", "3h 0m"} {
 		if strings.Contains(page, banned) {
@@ -682,10 +764,44 @@ func TestPrometheusServesProbes(t *testing.T) {
 	}
 }
 
+func TestGitHubOutageKeepsProbesWithUnknownVersion(t *testing.T) {
+	stub := newPrometheusStub(t)
+	github := newGitHubStub(t, latestRev)
+	github.down.Store(true)
+	base := startSite(t, "PROMETHEUS_URL="+stub.URL, "GITHUB_API_URL="+github.URL)
+
+	stats := fetchStats(t, base)
+	if stats.Status == nil || stats.Status.Probes == nil {
+		t.Fatal("github down: probes must still be present")
+	}
+	byName := make(map[string]int, len(stats.Status.Probes.Systems))
+	for i, s := range stats.Status.Probes.Systems {
+		byName[s.Name] = i
+	}
+	edge := stats.Status.Probes.Systems[byName["edge"]]
+	if edge.Revision != latestRev || edge.UpToDate != nil {
+		t.Errorf("edge = %+v, want its revision with unknown up-to-date state", edge)
+	}
+
+	_, page := get(t, base+"/")
+	if !strings.Contains(page, `class="vtag unknown"`) {
+		t.Error("page missing the unknown version badge")
+	}
+	for _, banned := range []string{`class="vtag up-to-date"`, `class="vtag outdated"`} {
+		if strings.Contains(page, banned) {
+			t.Errorf("page claims %q while github is down", banned)
+		}
+	}
+	if github.hits.Load() == 0 {
+		t.Error("github was never queried")
+	}
+}
+
 func TestPrometheusErrorDegradesToNoProbes(t *testing.T) {
 	stub := newPrometheusStub(t)
 	stub.down.Store(true)
-	base := startSite(t, "PROMETHEUS_URL="+stub.URL, "FEED_TTL=1s")
+	github := newGitHubStub(t, latestRev)
+	base := startSite(t, "PROMETHEUS_URL="+stub.URL, "GITHUB_API_URL="+github.URL, "FEED_TTL=1s")
 
 	if stats := fetchStats(t, base); stats.Status != nil {
 		t.Errorf("prometheus down: status = %+v, want null", stats.Status)
@@ -699,9 +815,11 @@ func TestPrometheusErrorDegradesToNoProbes(t *testing.T) {
 func TestStatusLastGoodServedDuringOutage(t *testing.T) {
 	gatus := newGatusStub(t)
 	prometheus := newPrometheusStub(t)
+	github := newGitHubStub(t, latestRev)
 	base := startSite(t,
 		"GATUS_URL="+gatus.URL,
 		"PROMETHEUS_URL="+prometheus.URL,
+		"GITHUB_API_URL="+github.URL,
 		"FEED_TTL=1s")
 
 	before := fetchStats(t, base)

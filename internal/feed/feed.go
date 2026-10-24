@@ -76,7 +76,9 @@ type Probes struct {
 
 // Probe is one Prometheus target. UptimeSeconds, CPU, Mem and Disk are nil
 // when the target is down or the metric is missing; Status is up, down, or
-// unknown.
+// unknown. Revision and UpdatedAt come from the host's textfile metrics and are
+// empty on a target that has not published them. UpToDate is nil when the
+// upstream revision is unknown or the host has no revision to compare.
 type Probe struct {
 	Name          string   `json:"name"`
 	Host          string   `json:"host,omitempty"`
@@ -86,6 +88,13 @@ type Probe struct {
 	Mem           *float64 `json:"mem,omitempty"`
 	Disk          *float64 `json:"disk,omitempty"`
 	Updated       string   `json:"updated,omitempty"` // RFC 3339
+
+	// Revision is the flake revision that built the running system, possibly
+	// suffixed "-dirty" or the literal "unknown". UpdatedAt is when that
+	// generation was activated.
+	Revision  string `json:"revision,omitempty"`
+	UpdatedAt string `json:"updatedAt,omitempty"` // RFC 3339
+	UpToDate  *bool  `json:"upToDate,omitempty"`
 
 	// Histories are percentage samples, oldest first, over the last
 	// ProbeHistoryWindow.

@@ -25,6 +25,8 @@ type config struct {
 	GatusURL      string
 	PrometheusURL string
 	PrometheusJob string
+	FlakeRepo     string
+	GitHubAPIURL  string
 }
 
 // loadConfig reads the environment. An unset MAGPIE_URL leaves magpie
@@ -38,6 +40,8 @@ func loadConfig(getenv func(string) string) (config, error) {
 		GatusURL:      getenv("GATUS_URL"),
 		PrometheusURL: getenv("PROMETHEUS_URL"),
 		PrometheusJob: orDefault(getenv("PROMETHEUS_JOB"), "node"),
+		FlakeRepo:     orDefault(getenv("FLAKE_REPO"), "pelikanade/flake"),
+		GitHubAPIURL:  orDefault(getenv("GITHUB_API_URL"), "https://api.github.com"),
 	}
 	ttl, err := time.ParseDuration(orDefault(getenv("FEED_TTL"), "30s"))
 	if err != nil {
@@ -93,16 +97,26 @@ func run() error {
 		}
 		uptime = gatus
 	}
-	var probes feed.ProbeSource
+	var (
+		probes   feed.ProbeSource
+		revision feed.RevisionSource
+	)
 	if cfg.PrometheusURL != "" {
 		prometheus, err := feed.NewPrometheus(cfg.PrometheusURL, cfg.PrometheusJob)
 		if err != nil {
 			return err
 		}
 		probes = prometheus
+
+		// The probe section is the only consumer of the upstream revision.
+		github, err := feed.NewGitHub(cfg.GitHubAPIURL, cfg.FlakeRepo)
+		if err != nil {
+			return err
+		}
+		revision = github
 	}
 	svc := feed.New(feed.Config{Location: loc, TTL: cfg.FeedTTL},
-		feed.Sources{Tokens: tokens, Uptime: uptime, Probes: probes})
+		feed.Sources{Tokens: tokens, Uptime: uptime, Probes: probes, Revision: revision})
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
