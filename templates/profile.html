@@ -19,9 +19,9 @@
       <section aria-labelledby="h-who">
         <h2 class="sec-h" id="h-who">Who</h2>
         <div class="indent bio">
-          <p>I'm noa — a full-spectrum developer who thinks systems should be warm environments for people, not cold monuments to engineering.</p>
-          <p>I treat tooling as part of the thinking process, and keep refining environments, abstractions and workflows until the friction mostly disappears. The systems i make follow that instinct: immutable, declarative, reproducible, and designed with usability in mind.</p>
-          <p>I've shipped infrastructure serving 800k+ users. Right now I'm exploring agentic tools, developer experience with nix, and formal verification of llm-generated code.</p>
+          <p>I'm noa — a full-spectrum developer who thinks systems should stay understandable and observable: declarative, reproducible structure that doesn't quietly drift into chaos.</p>
+          <p>I treat tooling as part of the thinking process, and keep refining my environments, abstractions and workflows until the friction mostly disappears and building things feels continuous. That instinct carries over into the systems I make, often with nix — and when it isn't nix, as immutable infrastructure, reproducible builds and signed artifact distribution, always with usability in mind.</p>
+          <p>I work on nix, kubernetes delivery &amp; ops, zero-trust networking and mainly declarative systems. Nixpkgs package maintainer since 2024, also contributing upstream fixes where the friction shows up.</p>
         </div>
       </section>
 
@@ -36,26 +36,26 @@
               <p class="detail">the one that propelled me into the immutable everything field (thank you).</p>
               <p class="act"><a class="btn" href="https://github.com/pelikanade/flake">learn more on github.com<span class="vh"> about flake</span> <span class="arr" aria-hidden="true">↗</span></a></p>
             </article>
-            <article class="frame proj" aria-labelledby="p-nixpkgs">
-              <h3 class="legend" id="p-nixpkgs">{{icon "i-repo"}}nixpkgs</h3>
-              <span class="tag">Nix / packaging</span>
-              <p class="lead">Contributor & package maintainer.</p>
-              <p class="detail">sometimes i also vendor packages in my own flake and others'.</p>
-              <p class="act"><a class="btn" href="https://github.com/pelikanade/nixpkgs">learn more on github.com<span class="vh"> about nixpkgs</span> <span class="arr" aria-hidden="true">↗</span></a></p>
+            <article class="frame proj" aria-labelledby="p-freezer">
+              <h3 class="legend" id="p-freezer">{{icon "i-repo"}}freezer</h3>
+              <span class="tag">Nix / builds</span>
+              <p class="lead">Self-hosted flake build service.</p>
+              <p class="detail">reproducible builds, signed store paths pushed to an s3-compatible cache.</p>
+              <p class="act"><a class="btn" href="https://github.com/pelikanade/freezer">learn more on github.com<span class="vh"> about freezer</span> <span class="arr" aria-hidden="true">↗</span></a></p>
             </article>
-            <article class="frame proj" aria-labelledby="p-dsh">
-              <h3 class="legend" id="p-dsh">{{icon "i-repo"}}paseo-plugins</h3>
+            <article class="frame proj" aria-labelledby="p-mimosa">
+              <h3 class="legend" id="p-mimosa">{{icon "i-repo"}}mimosa</h3>
+              <span class="tag">Kubernetes / IaC</span>
+              <p class="lead">Kubernetes on Talos Linux &amp; Terraform.</p>
+              <p class="detail">immutable infrastructure + gitops.</p>
+              <p class="act"><a class="btn" href="https://github.com/pelikanade/mimosa">learn more on github.com<span class="vh"> about mimosa</span> <span class="arr" aria-hidden="true">↗</span></a></p>
+            </article>
+            <article class="frame proj" aria-labelledby="p-paseo">
+              <h3 class="legend" id="p-paseo">{{icon "i-repo"}}paseo-plugins</h3>
               <span class="tag">Agents / tooling</span>
-              <p class="lead">A personal paseo package repository.</p>
-              <p class="detail">curated skills, plus a devenv plugin for portable development environments.</p>
-              <p class="act"><a class="btn" href="https://github.com/pelikanade/paseo-plugins">learn more on github.com<span class="vh"> about nvirellias-dsh-nuts</span> <span class="arr" aria-hidden="true">↗</span></a></p>
-            </article>
-            <article class="frame proj" aria-labelledby="p-astro">
-              <h3 class="legend" id="p-astro">{{icon "i-repo"}}astro-llm-translator</h3>
-              <span class="tag">Astro / LLM</span>
-              <p class="lead">Making LLMs translate my docs so i don't have to.</p>
-              <p class="detail">from the “other works” shelf.</p>
-              <p class="act"><a class="btn" href="https://github.com/pelikanade/astro-llm-translator">learn more on github.com<span class="vh"> about astro-llm-translator</span> <span class="arr" aria-hidden="true">↗</span></a></p>
+              <p class="lead">Independently installable paseo plugins.</p>
+              <p class="detail">reduce friction in development: devenv, generative-ui, host-monitor, obsidian, omp fidelity, and more.</p>
+              <p class="act"><a class="btn" href="https://github.com/pelikanade/paseo-plugins">learn more on github.com<span class="vh"> about paseo-plugins</span> <span class="arr" aria-hidden="true">↗</span></a></p>
             </article>
           </div>
         </div>
@@ -63,14 +63,10 @@
 
       <div class="lower">
         <section class="frame" aria-labelledby="h-skills">
-          <h2 class="legend" id="h-skills">{{icon "i-tools"}}Skills &amp; direction</h2>
+          <h2 class="legend" id="h-skills">{{icon "i-tools"}}Skills &amp; toolbelt</h2>
           <div class="skill-row">
             <span class="lbl-sm" id="s-daily">skills</span>
-            <ul class="pills" aria-labelledby="s-daily"><li class="pill">NixOS</li><li class="pill">Nix</li><li class="pill">Declarative ops</li><li class="pill">Immutable OS</li><li class="pill">Infrastructure</li></ul>
-          </div>
-          <div class="skill-row">
-            <span class="lbl-sm" id="s-now">exploring</span>
-            <ul class="pills" aria-labelledby="s-now"><li class="pill">Agentic software engineering</li><li class="pill">Developer experience</li><li class="pill">Formal verification of LLM code</li></ul>
+            <ul class="pills" aria-labelledby="s-daily"><li class="pill">NixOS</li><li class="pill">Nix</li><li class="pill">Kubernetes delivery &amp; ops</li><li class="pill">Zero-trust networking</li><li class="pill">Declarative systems</li><li class="pill">Immutable infrastructure</li></ul>
           </div>
           <div class="skill-row">
             <span class="lbl-sm" id="s-ws">Toolbelt</span>
@@ -81,6 +77,7 @@
         <section class="frame" aria-labelledby="h-know">
           <h2 class="legend" id="h-know">{{icon "i-info"}}Things you might want to know</h2>
           <ul class="know">
+            <li>{{icon "i-bud"}}I run an immutable OS on everything.</li>
             <li>{{icon "i-bud"}}I name my servers after plants.</li>
             <li>{{icon "i-bud"}}I once made a systemd timer that reminds me to take my meds.</li>
             <li>{{icon "i-bud"}}I <a href="https://www.youtube.com/watch?v=WLRRJjACyBs">gave talks</a> at nix meetups in china about convincing companies to use nix (mixed results), and have helped host the event since meetup #2.</li>
