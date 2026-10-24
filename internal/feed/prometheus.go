@@ -28,6 +28,8 @@ const (
 //	100 * (1 - rate(node_cpu_seconds_total{mode="idle"}[5m])) -> CPU %
 //	100 * (1 - MemAvailable / MemTotal)                -> memory %
 //	100 * (1 - filesystem avail / size)                -> root disk %
+//	nixos_flake_info{job=<job>}                        -> flake revision
+//	nixos_system_update_time_seconds{job=<job>}        -> activation time
 //
 // The metric queries use /api/v1/query_range so the same pass supplies the
 // current value and the sparkline history. The API is read-only and
@@ -68,6 +70,8 @@ func (p *Prometheus) Probes(ctx context.Context) (Probes, error) {
 		{"cpu", fmt.Sprintf(`100 * (1 - avg by (host, instance) (rate(node_cpu_seconds_total{job=%q,mode="idle"}[5m])))`, p.job), true},
 		{"mem", fmt.Sprintf(`max by (host, instance) (100 * (1 - node_memory_MemAvailable_bytes{job=%q} / node_memory_MemTotal_bytes{job=%q}))`, p.job, p.job), true},
 		{"disk", fmt.Sprintf(`max by (host, instance) (100 * (1 - node_filesystem_avail_bytes{job=%q,mountpoint="/",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{job=%q,mountpoint="/",fstype!~"tmpfs|overlay"}))`, p.job, p.job), true},
+		{"revision", fmt.Sprintf(`nixos_flake_info{job=%q}`, p.job), false},
+		{"activated", fmt.Sprintf(`nixos_system_update_time_seconds{job=%q}`, p.job), false},
 	}
 
 	type queryResult struct {
@@ -90,12 +94,14 @@ func (p *Prometheus) Probes(ctx context.Context) (Probes, error) {
 	}
 
 	var (
-		upSamples     []promSample
-		uptimeSamples []promSample
-		cpuSeries     []promSeries
-		memSeries     []promSeries
-		diskSeries    []promSeries
-		firstErr      error
+		upSamples        []promSample
+		uptimeSamples    []promSample
+		revisionSamples  []promSample
+		activatedSamples []promSample
+		cpuSeries        []promSeries
+		memSeries        []promSeries
+		diskSeries       []promSeries
+		firstErr         error
 	)
 	for range queries {
 		r := <-results
@@ -110,6 +116,10 @@ func (p *Prometheus) Probes(ctx context.Context) (Probes, error) {
 			upSamples = r.samples
 		case "uptime":
 			uptimeSamples = r.samples
+		case "revision":
+			revisionSamples = r.samples
+		case "activated":
+			activatedSamples = r.samples
 		case "cpu":
 			cpuSeries = r.series
 		case "mem":
@@ -161,6 +171,30 @@ func (p *Prometheus) Probes(ctx context.Context) (Probes, error) {
 				b.updated = s.at
 				b.probe.Updated = s.at.UTC().Format(time.RFC3339)
 			}
+		}
+	}
+
+	// The textfile metrics describe the running system, not a live resource
+	// sample, but they go stale the same way when the target stops answering.
+	// Suppress them for a down target like the resource metrics below.
+	for _, s := range revisionSamples {
+		b := builders[sampleHost(s.metric)]
+		if b == nil || b.probe.Status != "up" {
+			continue
+		}
+		if rev := strings.TrimSpace(s.metric["revision"]); rev != "" {
+			b.probe.Revision = rev
+		}
+	}
+
+	for _, s := range activatedSamples {
+		b := builders[sampleHost(s.metric)]
+		if b == nil || b.probe.Status != "up" {
+			continue
+		}
+		if v, ok := nonNegative(s.value); ok {
+			at := time.Unix(int64(math.Round(v)), 0).UTC().Format(time.RFC3339)
+			b.probe.UpdatedAt = at
 		}
 	}
 

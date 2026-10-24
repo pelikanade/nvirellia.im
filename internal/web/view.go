@@ -71,6 +71,9 @@ type probeView struct {
 
 type probeRow struct {
 	Name, Host, State, Uptime, Seen string
+	Version, VersionFull            string // short hash shown, full hash in the tooltip
+	VersionState, VersionLabel      string // "up-to-date", "outdated", "modified", "unknown"
+	Updated                         string // last generation activation in the feed zone
 	Metrics                         []metricView
 }
 
@@ -206,6 +209,8 @@ func newStatusView(s *feed.Status, loc *time.Location) *statusView {
 					newMetric("disk", "disk", p.Disk, p.DiskHistory, v.Probes.Window),
 				},
 			}
+			row.Version, row.VersionFull, row.VersionState, row.VersionLabel = versionInfo(p)
+			row.Updated = fmtMoment(p.UpdatedAt, loc)
 			if p.UptimeSeconds != nil {
 				row.Uptime = fmtDuration(*p.UptimeSeconds)
 			}
@@ -395,6 +400,52 @@ func fmtClock(s string, loc *time.Location) string {
 		return "—"
 	}
 	return t.In(loc).Format("15:04")
+}
+
+// fmtMoment is an RFC 3339 instant as "2006-01-02 15:04" in the feed zone. The
+// last update can be days old, so it carries the date that fmtClock omits.
+func fmtMoment(s string, loc *time.Location) string {
+	if s == "" {
+		return "—"
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return "—"
+	}
+	return t.In(loc).Format("2006-01-02 15:04")
+}
+
+// versionInfo formats a host's flake revision and its relation to upstream
+// main. A dirty tree based on main is "modified", not "outdated"; a nil
+// comparison means the upstream revision is unavailable.
+func versionInfo(p feed.Probe) (short, full, state, label string) {
+	if p.Revision == "" {
+		return "—", "", "", ""
+	}
+	short, full = shortRevision(p.Revision), p.Revision
+	switch {
+	case p.Revision == "unknown", p.UpToDate == nil:
+		return short, full, "unknown", "unknown"
+	case *p.UpToDate:
+		return short, full, "up-to-date", "up-to-date"
+	case strings.HasSuffix(p.Revision, "-dirty"):
+		return short, full, "modified", "modified"
+	default:
+		return short, full, "outdated", "outdated"
+	}
+}
+
+// shortRevision keeps the first seven hex characters of a git revision, and
+// any suffix such as "-dirty".
+func shortRevision(rev string) string {
+	base, suffix, _ := strings.Cut(rev, "-")
+	if len(base) > 7 {
+		base = base[:7]
+	}
+	if suffix != "" {
+		return base + "-" + suffix
+	}
+	return base
 }
 
 // fmtTokens matches the page script's readout format: 4477200 -> "4.5M", 182300 -> "182k", 4710 -> "4.7k".
