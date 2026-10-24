@@ -186,6 +186,8 @@ code, .mono { font-family: var(--cl-mono); font-size: 12px; }
 .btn .arr { color: var(--cl-link); }
 .archived { margin-top: 10px; font-size: var(--cl-size-sm); color: var(--cl-muted); }
 .archived .lbl-sm { display: inline; margin-right: 6px; }
+.archived a { color: inherit; border-bottom: 1px dotted currentColor; text-decoration: none; }
+.archived a:hover { color: var(--cl-link); border-bottom-style: solid; }
 
 .lower { margin-top: 24px; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 18px; align-items: start; }
 .lower .frame { background: rgba(255,255,255,.82); }
