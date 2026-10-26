@@ -22,7 +22,8 @@ const maxBody = 8 << 20
 //	GET <base>/api/usage?period=today  -> hourly buckets for today (local)
 //	GET <base>/api/usage?period=all    -> daily buckets from magpie's first usage record
 //
-// An unknown period silently falls back to 30 days, so every series is checked
+// Each bucket carries input, cache read, cache write and output tokens. An
+// unknown period silently falls back to 30 days, so every series is checked
 // against the period and bucket it was asked for.
 type Magpie struct {
 	baseURL string
@@ -79,14 +80,17 @@ func (m *Magpie) login(ctx context.Context) error {
 	return nil
 }
 
-// wireUsage is the part of magpie's /api/usage body the feed reads.
+// wireUsage is the part of magpie's /api/usage body the feed reads. A point is
+// one bucket's totals; magpie counts reasoning tokens inside output.
 type wireUsage struct {
 	Period string `json:"period"`
 	Bucket string `json:"bucket"`
 	Series []struct {
-		Time   time.Time `json:"time"`
-		Input  int64     `json:"input"`
-		Output int64     `json:"output"`
+		Time       time.Time `json:"time"`
+		Input      int64     `json:"input"`
+		CacheRead  int64     `json:"cache_read"`
+		CacheWrite int64     `json:"cache_write"`
+		Output     int64     `json:"output"`
 	} `json:"series"`
 }
 
@@ -101,7 +105,7 @@ func (m *Magpie) usage(ctx context.Context, period, bucket string) ([]Bucket, er
 	}
 	out := make([]Bucket, len(body.Series))
 	for i, s := range body.Series {
-		out[i] = Bucket{Start: s.Time, Input: s.Input, Output: s.Output}
+		out[i] = Bucket{Start: s.Time, Input: s.Input, CacheRead: s.CacheRead, CacheWrite: s.CacheWrite, Output: s.Output}
 	}
 	return out, nil
 }

@@ -51,11 +51,14 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// series is one magpie bucket on the wire.
+// series is one magpie bucket on the wire: a point of /api/usage's series, cache
+// reads and writes among its token counts.
 type series struct {
-	Time   time.Time `json:"time"`
-	Input  int64     `json:"input"`
-	Output int64     `json:"output"`
+	Time       time.Time `json:"time"`
+	Input      int64     `json:"input"`
+	CacheRead  int64     `json:"cache_read"`
+	CacheWrite int64     `json:"cache_write"`
+	Output     int64     `json:"output"`
 }
 
 // magpieStub speaks magpie's web API: GET /?k=<key> sets a session cookie, and
@@ -442,18 +445,21 @@ func get(t *testing.T, url string) (int, string) {
 	return resp.StatusCode, string(b)
 }
 
-type pair struct {
-	Input  int64 `json:"input"`
-	Output int64 `json:"output"`
+type totals struct {
+	Input      int64 `json:"input"`
+	CacheRead  int64 `json:"cacheRead"`
+	CacheWrite int64 `json:"cacheWrite"`
+	Output     int64 `json:"output"`
 }
 
 type statsResp struct {
 	GeneratedAt string `json:"generatedAt"`
 	TZ          string `json:"tz"`
 	Tokens      *struct {
-		Today  pair `json:"today"`
+		Today  totals `json:"today"`
 		Hourly struct {
-			Input []int64 `json:"input"`
+			Input     []int64 `json:"input"`
+			CacheRead []int64 `json:"cacheRead"`
 		} `json:"hourly"`
 		Daily struct {
 			Input []*int64 `json:"input"`
@@ -542,10 +548,10 @@ func TestMagpieServesTokensAndResources(t *testing.T) {
 	mid := localMidnight()
 	stub := newMagpieStub(t, "k-test",
 		[]series{
-			{Time: mid, Input: 100, Output: 10},
-			{Time: mid.Add(time.Hour), Input: 200, Output: 20},
+			{Time: mid, Input: 100, CacheRead: 800, CacheWrite: 5, Output: 10},
+			{Time: mid.Add(time.Hour), Input: 200, CacheWrite: 1, Output: 20},
 		},
-		[]series{{Time: mid, Input: 300, Output: 30}},
+		[]series{{Time: mid, Input: 300, CacheRead: 900, CacheWrite: 6, Output: 30}},
 	)
 	base := startSite(t, "MAGPIE_URL="+stub.URL, "MAGPIE_WEB_KEY=k-test")
 
@@ -553,18 +559,26 @@ func TestMagpieServesTokensAndResources(t *testing.T) {
 	if stats.Tokens == nil {
 		t.Fatal("magpie answering: tokens must be present")
 	}
-	if got := stats.Tokens.Today; got.Input != 300 || got.Output != 30 {
-		t.Errorf("today = %+v, want input 300 output 30", got)
+	if got := stats.Tokens.Today; got != (totals{Input: 300, CacheRead: 900, CacheWrite: 6, Output: 30}) {
+		t.Errorf("today = %+v, want input 300 cache read 900 cache write 6 output 30", got)
 	}
 	if n := len(stats.Tokens.Hourly.Input); n != 24 {
 		t.Errorf("hourly window = %d, want 24", n)
+	}
+	if n := len(stats.Tokens.Hourly.CacheRead); n != 24 {
+		t.Errorf("hourly cache window = %d, want 24", n)
+	}
+	if got := stats.Tokens.Hourly.CacheRead[0]; got != 800 {
+		t.Errorf("first hour cache read = %d, want 800", got)
 	}
 	if n := len(stats.Tokens.Daily.Input); n != 112 {
 		t.Errorf("daily window = %d, want 112", n)
 	}
 
 	_, page := get(t, base+"/")
-	for _, want := range []string{`id="resources"`, `href="#resources"`} {
+	// the panel counts the cache, not just the prompt and output
+	for _, want := range []string{`id="resources"`, `href="#resources"`,
+		"<dt>tokens today</dt><dd>1.2k</dd>", "<dt>cache read</dt><dd>900</dd>", "<dt>cache write</dt><dd>6</dd>"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page missing %q", want)
 		}

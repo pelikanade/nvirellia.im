@@ -1,6 +1,7 @@
-// Package feed builds the nvirellia.im feed: token windows from magpie, uptime
-// from gatus, and host probes from prometheus. Each section is nil while its
-// upstream has no data (unconfigured, unreachable, or empty).
+// Package feed builds the nvirellia.im feed: token windows from magpie (cache
+// tokens included), uptime from gatus, and host probes from prometheus. Each
+// section is nil while its upstream has no data (unconfigured, unreachable, or
+// empty).
 package feed
 
 import (
@@ -105,36 +106,62 @@ type Probe struct {
 
 // Tokens is the magpie-derived part of the feed.
 type Tokens struct {
-	Today  Pair   `json:"today"`
+	Today  Totals `json:"today"`
 	Hourly Hourly `json:"hourly"`
 	Daily  Daily  `json:"daily"`
 }
 
-// Pair is input and output token counts.
-type Pair struct {
-	Input  int64 `json:"input"`
-	Output int64 `json:"output"`
+// Totals is a window's token counts: the prompt's uncached input, its cache
+// reads and writes, and the output. Magpie counts reasoning tokens inside
+// output, and nothing of the prompt is counted twice.
+type Totals struct {
+	Input      int64 `json:"input"`
+	CacheRead  int64 `json:"cacheRead"`
+	CacheWrite int64 `json:"cacheWrite"`
+	Output     int64 `json:"output"`
 }
+
+// All is every token the totals count, cache included.
+func (t Totals) All() int64 { return t.Input + t.CacheRead + t.CacheWrite + t.Output }
 
 // Hourly is today's 24 local hours, oldest first; hours after now are zero.
 type Hourly struct {
-	Start  string  `json:"start"`
-	Input  []int64 `json:"input"`
-	Output []int64 `json:"output"`
+	Start      string  `json:"start"`
+	Input      []int64 `json:"input"`
+	CacheRead  []int64 `json:"cacheRead"`
+	CacheWrite []int64 `json:"cacheWrite"`
+	Output     []int64 `json:"output"`
+}
+
+// At is the totals of the hour at index i.
+func (h Hourly) At(i int) Totals {
+	return Totals{Input: h.Input[i], CacheRead: h.CacheRead[i], CacheWrite: h.CacheWrite[i], Output: h.Output[i]}
 }
 
 // Daily is 16 Monday-first weeks; nil entries are days after today, and days before magpie's first record are zero.
 type Daily struct {
-	Start  string   `json:"start"`
-	Input  []*int64 `json:"input"`
-	Output []*int64 `json:"output"`
+	Start      string   `json:"start"`
+	Input      []*int64 `json:"input"`
+	CacheRead  []*int64 `json:"cacheRead"`
+	CacheWrite []*int64 `json:"cacheWrite"`
+	Output     []*int64 `json:"output"`
+}
+
+// At is the totals of the day at index i, nil for a day after today.
+func (d Daily) At(i int) *Totals {
+	if d.Input[i] == nil {
+		return nil
+	}
+	return &Totals{Input: *d.Input[i], CacheRead: *d.CacheRead[i], CacheWrite: *d.CacheWrite[i], Output: *d.Output[i]}
 }
 
 // Bucket is magpie usage for one local hour or day, keyed by its start instant.
 type Bucket struct {
-	Start  time.Time `json:"start"`
-	Input  int64     `json:"input"`
-	Output int64     `json:"output"`
+	Start      time.Time `json:"start"`
+	Input      int64     `json:"input"`
+	CacheRead  int64     `json:"cacheRead"`
+	CacheWrite int64     `json:"cacheWrite"`
+	Output     int64     `json:"output"`
 }
 
 // Usage is magpie's token usage as the feed reads it: today's hourly buckets and

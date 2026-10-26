@@ -32,11 +32,14 @@
   function derive(d) {
     const T = d.tokens;
     if (!T) return null;                                            // magpie has no data: no Resources panel
-    const hourTot = T.hourly.input.map((v, i) => v + T.hourly.output[i]);
-    const dayTot = T.daily.input.map((v, i) => v == null ? null : v + T.daily.output[i]);
+    const H = T.hourly, D = T.daily;
+    const hCache = H.cacheRead.map((v, i) => v + H.cacheWrite[i]);      // the bands draw cache read and write as one
+    const dCache = D.cacheRead.map((v, i) => v == null ? null : v + D.cacheWrite[i]);
+    const hourTot = H.input.map((v, i) => v + hCache[i] + H.output[i]);
+    const dayTot = D.input.map((v, i) => v == null ? null : v + dCache[i] + D.output[i]);
     let last = dayTot.length - 1; while (last > 0 && dayTot[last] == null) last--;   // index of "today"
     return {
-      T, hourTot, dayTot, last,
+      T, hCache, dCache, hourTot, dayTot, last,
       H0: parseInt(T.hourly.start.slice(11, 13), 10),
       nowAt: (Date.parse(d.generatedAt) - Date.parse(T.hourly.start)) / 36e5,   // hours past local midnight at snapshot
     };
@@ -94,11 +97,11 @@
   const niceStep = v => { const p = 10 ** Math.floor(Math.log10(v)); return p * [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find(k => k * p >= v); };
   function series() {
     const { T, last } = m;
-    if (range === 'today') return { inp: T.hourly.input, out: T.hourly.output, label: hourLabel, step: 3,
-      cap: 'tokens by hour, today', now: m.nowAt };
-    const a = Math.max(0, last - 6);
-    return { inp: T.daily.input.slice(a, last + 1), out: T.daily.output.slice(a, last + 1), step: 1,
-      label: i => dayLabel(dayAt(a + i)), cap: 'tokens per day, last 7 days' };
+    if (range === 'today') return { inp: T.hourly.input, cache: m.hCache, out: T.hourly.output, label: hourLabel, step: 3,
+      cap: 'input, cache and output by hour, today', now: m.nowAt };
+    const a = Math.max(0, last - 6), cut = arr => arr.slice(a, last + 1);
+    return { inp: cut(T.daily.input), cache: cut(m.dCache), out: cut(T.daily.output), step: 1,
+      label: i => dayLabel(dayAt(a + i)), cap: 'input, cache and output per day, last 7 days' };
   }
   function drawGraph() {
     const svg = $('#graph');
@@ -107,7 +110,12 @@
     if (!W) return;                                                 // panel hidden
     const s = series(), n = s.inp.length;
     const L = 46, R = 12, TOP = 8, B = 22, pw = W - L - R, ph = H - TOP - B;
-    const step = niceStep(Math.max(1, ...s.inp, ...s.out) / 4), max = step * 4;
+    // the bands stack bottom-up — input, cache, output — so each is drawn between
+    // its own top line and the one below, and the y axis covers their total
+    const add = (a, b) => a.map((v, i) => v + b[i]);
+    const cacheTop = add(s.inp, s.cache), total = add(cacheTop, s.out);
+    const bands = [['in', s.inp, s.inp.map(() => 0)], ['cache', cacheTop, s.inp], ['out', total, cacheTop]];
+    const step = niceStep(Math.max(1, ...total) / 4), max = step * 4;
     const x = i => L + i * pw / (n - 1), y = v => TOP + ph - v / max * ph;
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.textContent = '';
@@ -124,12 +132,18 @@
       if (i) el('line', { x1: gx, x2: gx, y1: TOP, y2: TOP + ph, class: 'g-grid' }, svg, 1);
       el('text', { x: gx, y: H - 6, 'text-anchor': !i ? 'start' : i === n - 1 ? 'end' : 'middle', class: 'g-ax', text: s.label(i) }, svg, 1);
     }
-    [['in', s.inp], ['out', s.out]].forEach(([k, arr]) => {          // filled area + line per series
-      const pts = arr.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
-      el('polygon', { points: `${L},${TOP + ph} ${pts} ${L + pw},${TOP + ph}`, class: 'a-' + k }, svg, 1);
-      el('polyline', { points: pts, class: 'l-' + k }, svg, 1);
+    const at = arr => arr.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+    const points = arr => at(arr).join(' ');
+    bands.forEach(([k, hi, lo]) => {                                 // each series' band, stacked on the one below
+      el('polygon', { points: [...at(hi), ...at(lo).reverse()].join(' '), class: 'a-' + k }, svg, 1);
+    });
+    // the boundaries between bands, and the total they add up to
+    [['in', s.inp], ['cache', cacheTop]].forEach(([k, arr]) => {
+      el('polyline', { points: points(arr), class: 'l-' + k }, svg, 1);
       el('circle', { cx: x(n - 1), cy: y(arr[n - 1]), r: 3, class: 'd-' + k }, svg, 1);
     });
+    el('polyline', { points: points(total), class: 'l-total' }, svg, 1);
+    el('circle', { cx: x(n - 1), cy: y(total[n - 1]), r: 3, class: 'd-total' }, svg, 1);
     if (s.now >= 0 && s.now <= n - 1) {                             // today: the snapshot's place in the day
       const nx = x(s.now), end = s.now > (n - 1) / 2;
       el('line', { x1: nx, x2: nx, y1: TOP, y2: TOP + ph, class: 'g-now' }, svg, 1);
@@ -138,10 +152,10 @@
     for (let i = 0; i < n; i++) {                                    // hover strips with native tooltips
       const w = pw / (n - 1);
       const hit = el('rect', { x: Math.max(L, x(i) - w / 2), y: TOP, width: w / (i && i < n - 1 ? 1 : 2), height: ph, class: 'g-hit' }, svg, 1);
-      el('title', { text: `${s.label(i)}: input ${fmt(s.inp[i])}, output ${fmt(s.out[i])} tokens` }, hit, 1);
+      el('title', { text: `${s.label(i)}: ${fmt(total[i])} tokens · input ${fmt(s.inp[i])}, cache ${fmt(s.cache[i])}, output ${fmt(s.out[i])}` }, hit, 1);
     }
     set('graph-cap', s.cap);
-    svg.setAttribute('aria-label', `${s.cap}. input peaks at ${fmt(Math.max(...s.inp))}, output at ${fmt(Math.max(...s.out))}.`);
+    svg.setAttribute('aria-label', `${s.cap}, stacked to a total (the dark line). input peaks at ${fmt(Math.max(...s.inp))}, cache at ${fmt(Math.max(...s.cache))}, output at ${fmt(Math.max(...s.out))}, the total at ${fmt(Math.max(...total))}.`);
   }
   $$('[data-range]').forEach(b => b.addEventListener('click', () => {
     range = b.dataset.range;

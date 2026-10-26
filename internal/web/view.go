@@ -24,11 +24,11 @@ type page struct {
 }
 
 type readouts struct {
-	Today, Input, Output, ThisHour, Peak, Last7d, Note string
+	Today, Input, CacheRead, CacheWrite, Output, ThisHour, Peak, Last7d, Note string
 }
 
 type legend struct {
-	In, Out string
+	In, Cache, Out string
 }
 
 // statusView is the Status panel, already formatted for the template.
@@ -114,15 +114,16 @@ func newPage(f feed.Feed) (page, error) {
 	t := *f.Tokens
 	hourTot := make([]int64, len(t.Hourly.Input))
 	for i := range hourTot {
-		hourTot[i] = t.Hourly.Input[i] + t.Hourly.Output[i]
+		hourTot[i] = t.Hourly.At(i).All()
 	}
 	dayTot := make([]*int64, len(t.Daily.Input))
 	last := 0
 	for i := range dayTot {
-		if t.Daily.Input[i] == nil {
+		d := t.Daily.At(i)
+		if d == nil {
 			continue
 		}
-		v := *t.Daily.Input[i] + *t.Daily.Output[i]
+		v := d.All()
 		dayTot[i] = &v
 		last = i
 	}
@@ -135,22 +136,27 @@ func newPage(f feed.Feed) (page, error) {
 			last7 += *dayTot[i]
 		}
 	}
-	todayTot := t.Today.Input + t.Today.Output
+	todayTot := t.Today.All()
+	todayCache := t.Today.CacheRead + t.Today.CacheWrite
+	hourCache := t.Hourly.CacheRead[nowH] + t.Hourly.CacheWrite[nowH]
 
 	snapshotLabel := generated.Format("2006-01-02 15:04") + " (UTC+8)"
 	p.Resources = true
 	p.Readouts = readouts{
-		Today:    fmtTokens(todayTot),
-		Input:    fmtTokens(t.Today.Input),
-		Output:   fmtTokens(t.Today.Output),
-		ThisHour: fmtTokens(hourTot[nowH]),
-		Peak:     fmt.Sprintf("%s · %s", hourLabel(hourStart, peak), fmtTokens(hourTot[peak])),
-		Last7d:   fmtTokens(last7),
-		Note:     fmt.Sprintf("magpie snapshot: %s", snapshotLabel),
+		Today:      fmtTokens(todayTot),
+		Input:      fmtTokens(t.Today.Input),
+		CacheRead:  fmtTokens(t.Today.CacheRead),
+		CacheWrite: fmtTokens(t.Today.CacheWrite),
+		Output:     fmtTokens(t.Today.Output),
+		ThisHour:   fmtTokens(hourTot[nowH]),
+		Peak:       fmt.Sprintf("%s · %s", hourLabel(hourStart, peak), fmtTokens(hourTot[peak])),
+		Last7d:     fmtTokens(last7),
+		Note:       fmt.Sprintf("magpie snapshot: %s", snapshotLabel),
 	}
 	p.Legend = legend{
-		In:  fmt.Sprintf("today %s · this hour %s", fmtTokens(t.Today.Input), fmtTokens(t.Hourly.Input[nowH])),
-		Out: fmt.Sprintf("today %s · this hour %s", fmtTokens(t.Today.Output), fmtTokens(t.Hourly.Output[nowH])),
+		In:    fmt.Sprintf("today %s · this hour %s", fmtTokens(t.Today.Input), fmtTokens(t.Hourly.Input[nowH])),
+		Cache: fmt.Sprintf("today %s · this hour %s", fmtTokens(todayCache), fmtTokens(hourCache)),
+		Out:   fmt.Sprintf("today %s · this hour %s", fmtTokens(t.Today.Output), fmtTokens(t.Hourly.Output[nowH])),
 	}
 	return p, nil
 }
